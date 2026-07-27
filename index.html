@@ -14,20 +14,11 @@
             --bg-color: #fff0f5; 
         }
 
-        * {
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         body {
             background-color: var(--bg-color);
-            background-image: repeating-linear-gradient(
-                45deg,
-                #fff0f5,
-                #fff0f5 10px,
-                #ffe4e1 10px,
-                #ffe4e1 20px
-            );
+            background-image: repeating-linear-gradient(45deg, #fff0f5, #fff0f5 10px, #ffe4e1 10px, #ffe4e1 20px);
             font-family: 'Verdana', sans-serif;
             color: #333;
             margin: 0;
@@ -42,300 +33,139 @@
             text-align: center;
         }
 
-        /* Top Navigation / Header */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--baby-pink);
-            border: 3px outset var(--hot-pink);
-            padding: 10px 15px;
-            margin-bottom: 20px;
-            border-radius: 10px;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
-        }
-
-        .header h1 {
-            margin: 0;
-            font-size: 20px;
-            text-shadow: 1px 1px white;
-        }
-
-        .settings-btn {
-            background: var(--baby-blue);
-            border: 2px outset var(--dark-blue);
-            padding: 8px 12px;
-            font-weight: bold;
-            cursor: pointer;
-            border-radius: 5px;
-            font-family: 'Verdana', sans-serif;
-            color: #000;
-        }
-        
-        .settings-btn:active { border-style: inset; }
-
-        /* Modal Settings */
+        /* Modals (Supabase & Settings) */
         .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255, 240, 245, 0.85);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-            padding: 15px;
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 240, 245, 0.9); z-index: 1000;
+            justify-content: center; align-items: center; padding: 15px;
         }
 
         .modal-content {
-            background: white;
-            border: 4px dashed var(--baby-blue);
-            padding: 20px;
-            width: 100%;
-            max-width: 350px;
-            max-height: 90vh;
-            overflow-y: auto;
-            text-align: center;
-            box-shadow: 5px 5px 15px rgba(255, 105, 180, 0.3);
+            background: white; border: 4px dashed var(--baby-blue); padding: 20px;
+            width: 100%; max-width: 350px; max-height: 90vh; overflow-y: auto;
+            text-align: center; box-shadow: 5px 5px 15px rgba(255, 105, 180, 0.3);
             border-radius: 15px;
         }
 
-        .time-row {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
+        .input-field {
+            width: 100%; padding: 10px; margin-bottom: 15px;
+            border: 2px inset var(--baby-pink); border-radius: 5px;
+            font-family: 'Verdana', sans-serif; background: #f0f8ff;
         }
 
-        .modal-content input[type="time"] {
-            padding: 8px;
-            border: 2px inset var(--baby-pink);
-            font-family: 'Verdana', sans-serif;
-            border-radius: 5px;
-            width: 150px;
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            background: var(--baby-pink); border: 3px outset var(--hot-pink);
+            padding: 10px 15px; margin-bottom: 10px; border-radius: 10px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
         }
 
-        .remove-btn {
-            background: #ff9999;
-            border: 2px outset #cc0000;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            padding: 6px 10px;
-            border-radius: 5px;
-        }
-        .remove-btn:active { border-style: inset; }
+        .header h1 { margin: 0; font-size: 20px; text-shadow: 1px 1px white; }
 
-        .add-time-btn {
-            background: var(--baby-pink);
-            border: 2px outset var(--hot-pink);
-            width: 100%;
-            padding: 10px;
-            margin: 15px 0;
-            font-weight: bold;
-            border-radius: 5px;
-            cursor: pointer;
+        .btn-style {
+            background: var(--baby-blue); border: 2px outset var(--dark-blue);
+            padding: 8px 12px; font-weight: bold; cursor: pointer;
+            border-radius: 5px; font-family: 'Verdana', sans-serif; color: #000;
         }
-        .add-time-btn:active { border-style: inset; }
+        .btn-style:active { border-style: inset; }
 
-        /* Content Stash Drawer */
+        #cloudStatus {
+            text-align: center; font-size: 11px; color: var(--dark-blue);
+            font-weight: bold; margin-bottom: 15px; text-transform: uppercase;
+        }
+
+        /* Stash Drawer */
         .stash-drawer {
-            background: white;
-            border: 3px solid var(--baby-blue);
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 20px;
-            box-shadow: 3px 3px 0px var(--baby-pink);
-            max-width: 900px;
-            margin-left: auto;
-            margin-right: auto;
+            background: white; border: 3px solid var(--baby-blue); border-radius: 10px;
+            padding: 15px; margin-bottom: 20px; box-shadow: 3px 3px 0px var(--baby-pink);
+            max-width: 900px; margin-left: auto; margin-right: auto;
         }
         
-        .stash-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-            font-weight: bold;
-            color: var(--hot-pink);
-            font-family: 'Comic Sans MS', sans-serif;
-        }
-
+        .stash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; color: var(--hot-pink); font-family: 'Comic Sans MS', sans-serif; }
+        
         .stash-preview-container {
-            display: flex;
-            gap: 10px;
-            overflow-x: auto;
-            padding-bottom: 10px;
-            min-height: 90px;
-            align-items: center;
-            border: 2px dashed var(--baby-pink);
-            background: #fdfdfd;
-            padding: 10px;
-            border-radius: 5px;
+            display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px;
+            min-height: 90px; align-items: center; border: 2px dashed var(--baby-pink);
+            background: #fdfdfd; padding: 10px; border-radius: 5px;
         }
 
         .stash-thumb {
-            width: 70px;
-            height: 70px;
-            border-radius: 5px;
-            object-fit: cover;
-            border: 2px outset var(--baby-blue);
-            flex-shrink: 0;
-            cursor: pointer;
+            width: 70px; height: 70px; border-radius: 5px; object-fit: cover;
+            border: 2px outset var(--baby-blue); flex-shrink: 0; cursor: pointer;
         }
 
-        .stash-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
-        }
+        .stash-actions { display: flex; gap: 10px; margin-top: 10px; }
 
-        .stash-btn {
-            flex: 1;
-            background: var(--baby-blue);
-            border: 2px outset var(--dark-blue);
-            color: #000;
-            padding: 10px;
-            font-size: 13px;
-            font-weight: bold;
-            border-radius: 5px;
-            cursor: pointer;
-            text-align: center;
-        }
-        .stash-btn:active { border-style: inset; }
-
-        /* Layout for Posts */
+        /* Grid & Sections */
         .grid-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            max-width: 900px;
-            margin: 0 auto;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+            max-width: 900px; margin: 0 auto;
         }
-
-        @media (max-width: 768px) {
-            .grid-container { grid-template-columns: 1fr; }
-        }
+        @media (max-width: 768px) { .grid-container { grid-template-columns: 1fr; } }
 
         .section {
-            background: white;
-            border: 3px solid var(--baby-blue);
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 3px 3px 0px var(--baby-pink);
+            background: white; border: 3px solid var(--baby-blue);
+            padding: 15px; border-radius: 10px; box-shadow: 3px 3px 0px var(--baby-pink);
         }
 
-        /* Individual Slots */
+        /* Slots */
         .slot {
-            background: #fdfdfd;
-            border: 2px dashed var(--baby-pink);
-            margin-bottom: 15px;
-            padding: 15px;
-            text-align: center;
-            border-radius: 8px;
+            background: #fdfdfd; border: 2px dashed var(--baby-pink);
+            margin-bottom: 15px; padding: 15px; text-align: center; border-radius: 8px;
         }
 
         .slot-title {
-            font-weight: bold;
-            color: var(--dark-blue);
-            margin-bottom: 10px;
-            font-size: 14px;
-            background: #f0f8ff;
-            padding: 5px;
-            border: 1px solid var(--baby-blue);
-            border-radius: 4px;
+            font-weight: bold; color: var(--dark-blue); margin-bottom: 10px;
+            font-size: 14px; background: #f0f8ff; padding: 5px;
+            border: 1px solid var(--baby-blue); border-radius: 4px;
         }
 
-        /* Gallery inside slots */
         .slot-gallery {
-            display: none;
-            gap: 10px;
-            overflow-x: auto;
-            padding: 10px 5px;
-            background: #fff0f5;
-            border: 2px inset var(--baby-pink);
-            border-radius: 5px;
-            margin: 10px 0;
-            align-items: flex-start;
-        }
-
-        .gallery-item {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            flex-shrink: 0;
-            width: 120px;
+            display: flex; gap: 10px; overflow-x: auto; padding: 10px 5px;
+            background: #fff0f5; border: 2px inset var(--baby-pink);
+            border-radius: 5px; margin: 10px 0; align-items: flex-start;
         }
 
         .gallery-item img {
-            width: 100%;
-            height: 120px;
-            object-fit: cover;
-            border: 2px solid var(--baby-blue);
-            border-radius: 5px;
+            width: 100px; height: 100px; object-fit: cover;
+            border: 2px solid var(--baby-blue); border-radius: 5px; flex-shrink: 0;
         }
 
-        /* File Input & Buttons */
         input[type="file"] {
-            font-size: 11px;
-            margin-bottom: 10px;
-            width: 100%;
-            background: var(--bg-color);
-            padding: 5px;
-            border: 1px dashed var(--baby-blue);
+            font-size: 11px; margin-bottom: 10px; width: 100%;
+            background: var(--bg-color); padding: 5px; border: 1px dashed var(--baby-blue);
         }
 
-        .btn-group {
-            display: none;
-            flex-direction: column;
-            gap: 8px;
-            margin-top: 5px;
+        textarea.caption-box {
+            width: 100%; height: 60px; border: 2px inset var(--baby-blue);
+            border-radius: 5px; padding: 8px; font-family: 'Verdana', sans-serif;
+            font-size: 12px; resize: none; margin-bottom: 10px;
+            background: #f0f8ff; color: #333;
         }
 
         .action-btn {
-            background: var(--baby-pink);
-            border: 2px outset var(--hot-pink);
-            padding: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            border-radius: 5px;
-            width: 100%;
-            font-size: 12px;
+            background: var(--baby-pink); border: 2px outset var(--hot-pink);
+            padding: 10px; font-weight: bold; cursor: pointer;
+            border-radius: 5px; width: 100%; font-size: 14px; margin-top: 5px;
         }
-
         .action-btn:active { border-style: inset; }
         
-        .action-btn.clear {
-            background: #fff;
-            border: 2px outset #ccc;
-            color: #666;
-            font-size: 12px;
-            padding: 8px;
-        }
+        .action-btn.clear { background: #fff; border: 2px outset #ccc; color: #666; font-size: 12px; padding: 8px; }
+
+        .time-row { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .remove-btn { background: #ff9999; border: 2px outset #cc0000; color: white; font-weight: bold; cursor: pointer; padding: 6px 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>★ My Dashboard ★</h1>
-        <button class="settings-btn" onclick="openSettings()">⚙️ Edit Schedule</button>
-    </div>
-
-    <!-- Content Stash -->
-    <div class="stash-drawer">
-        <div class="stash-header">
-            <span>★ Content Stash</span>
-            <span id="stashCount" style="font-size: 12px; color: #666;">0 items</span>
-        </div>
-        <div class="stash-preview-container" id="stashPreview">
-            <span style="font-size: 12px; color: #aaa;">Dump photos here to use later...</span>
-        </div>
-        <div class="stash-actions">
-            <label class="stash-btn">
-                + Dump Photos
-                <input type="file" multiple accept="image/*" style="display: none;" onchange="uploadToStash(event)">
-            </label>
-            <button class="stash-btn" onclick="autoFillDay()" style="background: var(--baby-pink); border-color: var(--hot-pink);">✨ Auto-Slot All</button>
+    <!-- Cloud Vault Setup Modal -->
+    <div id="dbModal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>★ Vault Setup ★</h2>
+            <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Connect your secure Supabase Vault to save high-res files.</p>
+            <input type="text" id="dbUrl" class="input-field" placeholder="Supabase Project URL" />
+            <input type="password" id="dbKey" class="input-field" placeholder="Supabase Service Role Key" />
+            <button class="btn-style" style="width: 100%; background: var(--baby-pink); border-color: var(--hot-pink);" onclick="connectDatabase()">Connect & Sync</button>
         </div>
     </div>
 
@@ -344,159 +174,389 @@
         <div class="modal-content">
             <h2>Your Schedule</h2>
             <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Build your exact daily routine below.</p>
-            
-            <div id="scheduleInputsContainer">
-                <!-- Inputs injected here by JS -->
-            </div>
-            
-            <button class="add-time-btn" onclick="addTimeInput()">+ Add Another Post Time</button>
-            <button class="settings-btn" style="width: 100%; margin-top: 10px;" onclick="saveAndCloseSettings()">Save & Close</button>
+            <div id="scheduleInputsContainer"></div>
+            <button class="btn-style" style="width: 100%; margin: 15px 0; background: var(--baby-pink);" onclick="addTimeInput()">+ Add Time</button>
+            <button class="btn-style" style="width: 100%;" onclick="saveAndCloseSettings()">Save & Close</button>
         </div>
     </div>
 
-    <div class="grid-container">
-        <!-- Scheduled Column -->
-        <div class="section">
-            <h2>★ Daily Schedule ★</h2>
-            <div id="scheduled-container">
-                <!-- Scheduled slots injected here by JS -->
+    <div class="header">
+        <h1>★ Queue Manager ★</h1>
+        <button class="btn-style" onclick="openSettings()">⚙️ Schedule</button>
+    </div>
+
+    <div id="cloudStatus">Checking connection...</div>
+
+    <div id="appInterface" style="display: none;">
+        
+        <!-- Content Stash -->
+        <div class="stash-drawer">
+            <div class="stash-header">
+                <span>★ Content Stash</span>
+                <span id="stashCount" style="font-size: 12px; color: #666;">0 items</span>
+            </div>
+            <div class="stash-preview-container" id="stashPreview">
+                <span style="font-size: 12px; color: #aaa;">Dump photos here to use later...</span>
+            </div>
+            <div class="stash-actions">
+                <label class="btn-style" style="flex: 1; text-align: center;">
+                    + Dump Photos
+                    <input type="file" multiple accept="image/*" style="display: none;" onchange="uploadToStash(event)">
+                </label>
+                <button class="btn-style" onclick="autoFillDay()" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);">✨ Auto-Slot</button>
             </div>
         </div>
 
-        <!-- Random/Whenever Column -->
-        <div class="section">
-            <h2>★ Spontaneous ★</h2>
-            <div id="random-container">
-                <!-- Random slots injected here by JS -->
+        <div class="grid-container">
+            <!-- Scheduled Column -->
+            <div class="section">
+                <h2>★ Daily Schedule ★</h2>
+                <div id="scheduled-container"></div>
             </div>
-            <button class="add-time-btn" onclick="addRandomSlot()">+ Add Extra Random Slot</button>
+
+            <!-- Random Column -->
+            <div class="section">
+                <h2>★ Spontaneous ★</h2>
+                <div id="random-container"></div>
+                <button class="btn-style" style="width: 100%; margin-top: 15px;" onclick="addRandomSlot()">+ Add Random Slot</button>
+            </div>
         </div>
     </div>
 
     <script>
-        // Core Data
-        let scheduleTimes = JSON.parse(localStorage.getItem('myCustomSchedule')) || ['09:00', '13:00', '18:00', '22:00'];
-        let randomSlotCount = 3; 
-        let photoStash = []; 
-
-        window.onload = function() {
-            renderApp();
+        // Supabase Vault Credentials
+        let dbConfig = { url: '', key: '' };
+        let syncTimeout;
+        
+        // Main App State (Stores Filenames, not the massive files)
+        let appData = {
+            schedule: ['09:00', '13:00', '18:00', '22:00'],
+            randomSlotCount: 3,
+            stash: [],
+            slots: {} // { caption: "", images: ["filename.jpg"] }
         };
 
-        // --- CORE RENDER ENGINE ---
-        function renderApp() {
-            scheduleTimes.sort();
+        // Holds actual blob URLs for rendering UI without downloading multiple times
+        let loadedImages = {};
 
-            const schedContainer = document.getElementById('scheduled-container');
-            schedContainer.innerHTML = '';
-            
-            if(scheduleTimes.length === 0) {
-                schedContainer.innerHTML = '<p style="text-align:center; font-size:12px; color:#666;">No scheduled posts. Open settings to add some!</p>';
+        // --- SUPABASE CLOUD SYNC ---
+        function init() {
+            const savedConfig = localStorage.getItem('supabaseConfig');
+            if (savedConfig) {
+                dbConfig = JSON.parse(savedConfig);
+                fetchCloudData();
+            } else {
+                document.getElementById('dbModal').style.display = 'flex';
+                document.getElementById('cloudStatus').innerText = "AWAITING CREDENTIALS...";
             }
+        }
 
-            scheduleTimes.forEach((time24h, index) => {
-                const timeFormatted = formatTime12h(time24h);
-                schedContainer.innerHTML += createSlotHTML(`sched-${index}`, `Post ${index + 1} - ${timeFormatted}`);
+        function connectDatabase() {
+            dbConfig.url = document.getElementById('dbUrl').value.trim();
+            dbConfig.key = document.getElementById('dbKey').value.trim();
+            if (!dbConfig.url || !dbConfig.key) return alert("Requires both URL and Key");
+            
+            localStorage.setItem('supabaseConfig', JSON.stringify(dbConfig));
+            document.getElementById('dbModal').style.display = 'none';
+            fetchCloudData();
+        }
+
+        async function fetchCloudData() {
+            document.getElementById('cloudStatus').innerText = "SYNCING WITH VAULT...";
+            try {
+                // Fetch the JSON state file from the storage bucket
+                const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/state.json`, {
+                    headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
+                });
+                
+                if (response.ok) {
+                    const json = await response.json();
+                    appData = { ...appData, ...json };
+                }
+
+                document.getElementById('cloudStatus').innerText = "☁️ VAULT SYNCED & SECURE";
+                document.getElementById('appInterface').style.display = 'block';
+                
+                // Fetch all images that are part of the state
+                await preloadAllImages();
+                renderApp();
+
+            } catch (err) {
+                document.getElementById('cloudStatus').innerText = "CONNECTION ERROR. CHECK CREDENTIALS.";
+                localStorage.removeItem('supabaseConfig');
+                document.getElementById('dbModal').style.display = 'flex';
+            }
+        }
+
+        function saveToCloud() {
+            document.getElementById('cloudStatus').innerText = "SAVING TO VAULT...";
+            clearTimeout(syncTimeout);
+            syncTimeout = setTimeout(async () => {
+                try {
+                    const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+                    await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
+                        method: 'POST', // Supabase treats POST as upload/upsert if header is present
+                        headers: { 
+                            'apikey': dbConfig.key, 
+                            'Authorization': `Bearer ${dbConfig.key}`,
+                            'Content-Type': 'application/json',
+                            'x-upsert': 'true'
+                        },
+                        body: blob
+                    });
+                    document.getElementById('cloudStatus').innerText = "☁️ ALL CHANGES SAVED";
+                } catch (err) {
+                    document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
+                }
+            }, 1000);
+        }
+
+        // --- RAW FILE HANDLING (NO COMPRESSION) ---
+        async function uploadFileToVault(file) {
+            document.getElementById('cloudStatus').innerText = "UPLOADING HIGH-RES FILE...";
+            // Create a unique filename
+            const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+            
+            // Upload directly to Supabase storage bucket named "vault"
+            await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
+                method: 'POST',
+                headers: { 
+                    'apikey': dbConfig.key, 
+                    'Authorization': `Bearer ${dbConfig.key}`,
+                    'Content-Type': file.type
+                },
+                body: file
             });
 
-            const randomContainer = document.getElementById('random-container');
-            randomContainer.innerHTML = '';
-            for(let i = 0; i < randomSlotCount; i++) {
-                randomContainer.innerHTML += createSlotHTML(`rand-${i}`, `Spontaneous Post`);
+            // Cache it locally so it renders immediately
+            loadedImages[fileName] = URL.createObjectURL(file);
+            document.getElementById('cloudStatus').innerText = "☁️ VAULT SYNCED & SECURE";
+            return fileName;
+        }
+
+        async function preloadAllImages() {
+            // Gathers all filenames from stash and slots
+            let filesToFetch = [...appData.stash];
+            Object.values(appData.slots).forEach(slot => {
+                if (slot.images) filesToFetch.push(...slot.images);
+            });
+
+            // Download raw files from Vault and create object URLs for rendering
+            for (let fileName of filesToFetch) {
+                if (!loadedImages[fileName]) {
+                    try {
+                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
+                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
+                        });
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            loadedImages[fileName] = URL.createObjectURL(blob);
+                        }
+                    } catch (e) {
+                        console.error("Failed to load image:", fileName);
+                    }
+                }
             }
+        }
+
+        // --- CORE UI RENDER ---
+        function renderApp() {
+            appData.schedule.sort();
+            const schedContainer = document.getElementById('scheduled-container');
+            const randContainer = document.getElementById('random-container');
+            
+            schedContainer.innerHTML = '';
+            appData.schedule.forEach((time, index) => {
+                const id = `sched-${index}`;
+                schedContainer.innerHTML += createSlotHTML(id, `Post ${index + 1} - ${formatTime(time)}`);
+                hydrateSlotUI(id);
+            });
+
+            randContainer.innerHTML = '';
+            for(let i = 0; i < appData.randomSlotCount; i++) {
+                const id = `rand-${i}`;
+                randContainer.innerHTML += createSlotHTML(id, `Spontaneous Post`);
+                hydrateSlotUI(id);
+            }
+
+            renderStash();
         }
 
         function createSlotHTML(id, title) {
             return `
                 <div class="slot" id="slot-${id}">
                     <div class="slot-title">${title}</div>
-                    <input type="file" multiple accept="image/*" onchange="loadImages(event, '${id}')">
+                    <input type="file" multiple accept="image/*" onchange="uploadToSlot(event, '${id}')">
                     
-                    <div class="slot-gallery" id="gallery-${id}"></div>
+                    <div class="slot-gallery" id="gallery-${id}" style="display: none;"></div>
                     
-                    <div class="btn-group" id="btnGroup-${id}">
-                        <button class="action-btn clear" onclick="clearSlot('${id}', this)">❌ Clear Entire Slot</button>
+                    <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
+                    
+                    <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
+                        <button class="action-btn" onclick="prepForPost('${id}')">✨ Prep for OF (Copy & Bump)</button>
+                        <button class="action-btn clear" onclick="clearSlot('${id}')">❌ Clear Slot</button>
                     </div>
                 </div>
             `;
         }
 
-        function formatTime12h(time24h) {
+        function hydrateSlotUI(id) {
+            if(!appData.slots[id]) return;
+            const data = appData.slots[id];
+            
+            document.getElementById(`caption-${id}`).value = data.caption || "";
+            
+            const gallery = document.getElementById(`gallery-${id}`);
+            const btnGroup = document.getElementById(`btnGroup-${id}`);
+            
+            if (data.images && data.images.length > 0) {
+                gallery.innerHTML = data.images.map(fileName => {
+                    const url = loadedImages[fileName] || '';
+                    return `<div class="gallery-item"><img src="${url}"></div>`;
+                }).join('');
+                gallery.style.display = 'flex';
+                btnGroup.style.display = 'flex';
+            } else if (data.caption) {
+                gallery.style.display = 'none';
+                btnGroup.style.display = 'flex';
+            } else {
+                gallery.style.display = 'none';
+                btnGroup.style.display = 'none';
+            }
+        }
+
+        function formatTime(time24h) {
             let [hours, minutes] = time24h.split(':');
             let ampm = hours >= 12 ? 'PM' : 'AM';
-            hours = hours % 12;
-            hours = hours ? hours : 12; 
+            hours = hours % 12 || 12; 
             return `${hours}:${minutes} ${ampm}`;
         }
 
-        // --- STASH & AUTO-FILL LOGIC ---
-        function uploadToStash(event) {
+        // --- DATA HANDLING ---
+        async function uploadToSlot(event, id) {
             const files = Array.from(event.target.files);
-            files.forEach(file => {
-                photoStash.push(URL.createObjectURL(file)); 
-            });
-            renderStash();
+            if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
+            
+            for (let file of files) {
+                const fileName = await uploadFileToVault(file);
+                appData.slots[id].images.push(fileName);
+            }
+            
+            hydrateSlotUI(id);
+            saveToCloud();
             event.target.value = ""; 
         }
 
+        function updateCaption(id, text) {
+            if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
+            appData.slots[id].caption = text;
+            saveToCloud();
+            hydrateSlotUI(id);
+        }
+
+        function clearSlot(id) {
+            appData.slots[id] = { caption: "", images: [] };
+            hydrateSlotUI(id);
+            saveToCloud();
+        }
+
+        // --- STASH & AUTO-FILL ---
+        async function uploadToStash(event) {
+            const files = Array.from(event.target.files);
+            for (let file of files) {
+                const fileName = await uploadFileToVault(file);
+                appData.stash.push(fileName);
+                renderStash();
+            }
+            saveToCloud();
+            event.target.value = "";
+        }
+
         function renderStash() {
-            document.getElementById('stashCount').innerText = `${photoStash.length} items`;
+            document.getElementById('stashCount').innerText = `${appData.stash.length} items`;
             const previewContainer = document.getElementById('stashPreview');
             
-            if (photoStash.length === 0) {
+            if (appData.stash.length === 0) {
                 previewContainer.innerHTML = '<span style="font-size: 12px; color: #aaa;">Dump photos here to use later...</span>';
                 return;
             }
 
-            previewContainer.innerHTML = photoStash.map((url, index) => 
-                `<img src="${url}" class="stash-thumb" onclick="removeFromStash(${index})" title="Click to remove">`
-            ).join('');
+            previewContainer.innerHTML = appData.stash.map((fileName, index) => {
+                const url = loadedImages[fileName] || '';
+                return `<img src="${url}" class="stash-thumb" onclick="removeFromStash(${index})" title="Click to remove">`;
+            }).join('');
         }
 
         function removeFromStash(index) {
-            URL.revokeObjectURL(photoStash[index]); 
-            photoStash.splice(index, 1);
+            appData.stash.splice(index, 1);
             renderStash();
+            saveToCloud();
         }
 
         function autoFillDay() {
             const schedContainer = document.getElementById('scheduled-container');
             const slots = Array.from(schedContainer.querySelectorAll('.slot'));
 
-            if (slots.length === 0) {
-                alert("You don't have any scheduled slots to fill!");
-                return;
-            }
-            if (photoStash.length === 0) {
-                alert("Your stash is empty!");
-                return;
-            }
+            if (slots.length === 0 || appData.stash.length === 0) return alert("Check if you have slots and stash items!");
 
-            // Round-robin distribution: deals photos one by one into the slots like playing cards
             let slotIndex = 0;
-            while (photoStash.length > 0) {
-                const photoUrl = photoStash.shift(); 
+            while (appData.stash.length > 0) {
+                const fileName = appData.stash.shift(); 
                 const targetSlot = slots[slotIndex];
                 const id = targetSlot.id.replace('slot-', '');
                 
-                addImageToSlot(id, photoUrl);
+                if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
+                appData.slots[id].images.push(fileName);
                 
-                // Move to the next slot, loop back to the beginning if we hit the end
                 slotIndex = (slotIndex + 1) % slots.length;
             }
             
-            renderStash();
+            renderApp();
+            saveToCloud();
+        }
+
+        // --- PREP FOR OF (The Android Workaround) ---
+        async function prepForPost(id) {
+            const data = appData.slots[id];
+            if (!data) return;
+
+            // 1. Copy text to clipboard
+            if (data.caption) {
+                try {
+                    await navigator.clipboard.writeText(data.caption);
+                    alert("✅ Caption copied!");
+                } catch (err) {
+                    alert("Couldn't copy caption. You may need to copy it manually.");
+                }
+            }
+
+            // 2. Download images to bump them to the top of Recents
+            if (data.images && data.images.length > 0) {
+                data.images.forEach((fileName, index) => {
+                    const url = loadedImages[fileName];
+                    if(url) {
+                        const a = document.createElement('a');
+                        a.href = url;
+                        // Use original extension if possible, default to jpg
+                        const ext = fileName.split('.').pop() || 'jpg';
+                        a.download = `OF_Post_${id}_Img_${index + 1}.${ext}`; 
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                });
+            }
         }
 
         // --- SETTINGS MODAL LOGIC ---
         function openSettings() {
             const container = document.getElementById('scheduleInputsContainer');
             container.innerHTML = '';
-            scheduleTimes.forEach((time, index) => {
+            appData.schedule.forEach((time, index) => {
                 container.innerHTML += `
                     <div class="time-row" id="time-row-${index}">
-                        <input type="time" class="time-input" value="${time}">
-                        <button class="remove-btn" onclick="removeTimeInput(${index})">X</button>
+                        <input type="time" class="input-field" style="margin:0; width:150px;" value="${time}">
+                        <button class="remove-btn" onclick="this.parentElement.remove()">X</button>
                     </div>
                 `;
             });
@@ -505,117 +565,33 @@
 
         function addTimeInput() {
             const container = document.getElementById('scheduleInputsContainer');
-            const newIndex = container.children.length;
             const div = document.createElement('div');
             div.className = 'time-row';
-            div.id = `time-row-${newIndex}`;
             div.innerHTML = `
-                <input type="time" class="time-input" value="12:00">
+                <input type="time" class="input-field" style="margin:0; width:150px;" value="12:00">
                 <button class="remove-btn" onclick="this.parentElement.remove()">X</button>
             `;
             container.appendChild(div);
         }
 
-        function removeTimeInput(index) {
-            document.getElementById(`time-row-${index}`).remove();
-        }
-
         function saveAndCloseSettings() {
-            const inputs = document.querySelectorAll('.time-input');
+            const inputs = document.querySelectorAll('#scheduleInputsContainer input[type="time"]');
             let newTimes = [];
-            inputs.forEach(input => {
-                if(input.value) newTimes.push(input.value);
-            });
+            inputs.forEach(input => { if(input.value) newTimes.push(input.value); });
             
-            scheduleTimes = newTimes;
-            localStorage.setItem('myCustomSchedule', JSON.stringify(scheduleTimes));
-            
+            appData.schedule = newTimes;
             document.getElementById('settingsModal').style.display = 'none';
             renderApp();
+            saveToCloud();
         }
 
         function addRandomSlot() {
-            randomSlotCount++;
-            const randomContainer = document.getElementById('random-container');
-            const newId = `rand-${randomSlotCount - 1}`;
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = createSlotHTML(newId, `Spontaneous Post`);
-            randomContainer.appendChild(tempDiv.firstElementChild);
+            appData.randomSlotCount++;
+            renderApp();
+            saveToCloud();
         }
 
-        // --- IMAGE & CLIPBOARD LOGIC ---
-        function loadImages(event, id) {
-            const files = Array.from(event.target.files);
-            files.forEach(file => {
-                const url = URL.createObjectURL(file);
-                addImageToSlot(id, url);
-            });
-            event.target.value = ""; 
-        }
-
-        function addImageToSlot(id, url) {
-            const gallery = document.getElementById(`gallery-${id}`);
-            const btnGroup = document.getElementById(`btnGroup-${id}`);
-            
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'gallery-item';
-            
-            const img = document.createElement('img');
-            img.src = url;
-            
-            const copyBtn = document.createElement('button');
-            copyBtn.innerText = '📋 Copy';
-            copyBtn.className = 'action-btn';
-            copyBtn.onclick = () => copyToClipboard(url, copyBtn);
-            
-            itemDiv.appendChild(img);
-            itemDiv.appendChild(copyBtn);
-            
-            gallery.appendChild(itemDiv);
-            gallery.style.display = 'flex';
-            btnGroup.style.display = 'flex';
-        }
-
-        function clearSlot(id, btnElement) {
-            const gallery = document.getElementById(`gallery-${id}`);
-            gallery.innerHTML = "";
-            gallery.style.display = 'none';
-            
-            const btnGroup = document.getElementById(`btnGroup-${id}`);
-            btnGroup.style.display = 'none';
-            
-            const fileInput = btnElement.parentElement.parentElement.querySelector('input[type="file"]');
-            if (fileInput) fileInput.value = "";
-        }
-
-        async function copyToClipboard(url, btnElement) {
-            try {
-                const response = await fetch(url);
-                const blob = await response.blob();
-                
-                await navigator.clipboard.write([
-                    new ClipboardItem({
-                        [blob.type]: blob
-                    })
-                ]);
-                
-                // Visual feedback on the button
-                const originalText = btnElement.innerText;
-                const originalBg = btnElement.style.background;
-                
-                btnElement.innerText = "✅ Copied!";
-                btnElement.style.background = "#90ee90"; // Light green flash
-                
-                setTimeout(() => {
-                    btnElement.innerText = originalText;
-                    btnElement.style.background = originalBg;
-                }, 2000);
-                
-            } catch (err) {
-                console.error("Clipboard error:", err);
-                alert("Failed to copy. Your browser might restrict clipboard access.");
-            }
-        }
+        init();
     </script>
 </body>
 </html>
