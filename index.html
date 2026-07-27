@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>LAUNCHPAD // CLOUD COMMAND</title>
+  <style>
+    :root {
+      --bg-dark: #050608;
+      --panel-bg: #111216;
+      --panel-border: #2a2d35;
+      --accent-cyan: #00e5ff;
+      --accent-pink: #ff0044;
+      --accent-olive: #5c664a;
+      --text-main: #c8cedb;
+      --text-muted: #656d7d;
+      --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-stack);
+      padding-bottom: 80px;
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(0, 229, 255, 0.03), transparent 70%),
+        linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 20px;
+    }
+
+    /* Modals & Overlays */
+    #dbModal {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(5, 6, 8, 0.98);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-box {
+      background: var(--panel-bg);
+      border: 1px solid var(--accent-olive);
+      padding: 24px;
+      border-radius: 8px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 0 30px rgba(92, 102, 74, 0.2);
+    }
+
+    .modal-box h2 {
+      color: var(--accent-cyan);
+      font-size: 1.2rem;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 8px;
+    }
+
+    .input-field {
+      width: 100%;
+      background: #000;
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+
+    .input-field:focus { border-color: var(--accent-cyan); outline: none; }
+
+    /* Header */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(17, 18, 22, 0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 2px solid var(--accent-olive);
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
+    }
+
+    .nav-btn, .btn-primary {
+      background: #1a1c23;
+      border: 1px solid var(--panel-border);
+      color: var(--accent-cyan);
+      padding: 8px 16px;
+      font-weight: bold; font-size: 1.1rem;
+      border-radius: 4px; cursor: pointer;
+    }
+    
+    .btn-primary { font-size: 0.9rem; width: 100%; margin-top: 8px; }
+    .btn-primary:active, .nav-btn:active { background: var(--accent-cyan); color: #000; }
+
+    .date-display { text-align: center; }
+    .date-display h1 { font-size: 0.95rem; letter-spacing: 1px; color: #fff; text-transform: uppercase; }
+    .date-display span { font-size: 0.75rem; color: var(--accent-pink); letter-spacing: 0.5px; }
+
+    /* Cloud Status */
+    #cloudStatus {
+      text-align: center; font-size: 0.7rem; color: var(--accent-olive);
+      padding: 8px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;
+    }
+
+    .container { padding: 16px; max-width: 600px; margin: 0 auto; }
+
+    .section-title {
+      font-size: 0.8rem; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--accent-olive); margin: 20px 0 10px 0;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title::after { content: ""; flex: 1; height: 1px; background: var(--panel-border); }
+
+    /* Slots */
+    .slots-grid { display: flex; flex-direction: column; gap: 16px; }
+    .slot-card {
+      background: var(--panel-bg); border: 1px solid var(--panel-border);
+      border-left: 4px solid var(--accent-cyan); border-radius: 6px;
+      padding: 12px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    }
+    .slot-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .slot-number { font-size: 0.75rem; font-weight: bold; color: var(--accent-cyan); letter-spacing: 1px; }
+
+    .photo-preview-container {
+      display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; min-height: 80px; align-items: center;
+    }
+    .photo-thumb {
+      width: 70px; height: 70px; border-radius: 4px; object-fit: cover;
+      border: 1px solid var(--accent-olive); flex-shrink: 0;
+    }
+    .upload-btn-label {
+      width: 70px; height: 70px; border: 1px dashed var(--panel-border); border-radius: 4px;
+      display: flex; align-items: center; justify-content: center; color: var(--text-muted);
+      font-size: 1.5rem; cursor: pointer; flex-shrink: 0; background: rgba(255, 255, 255, 0.02);
+    }
+
+    textarea {
+      width: 100%; background: #000; border: 1px solid var(--panel-border); border-radius: 4px;
+      color: var(--text-main); padding: 8px; font-family: inherit; font-size: 0.85rem;
+      resize: none; margin-top: 8px; outline: none;
+    }
+    textarea:focus { border-color: var(--accent-cyan); }
+
+    .launch-btn {
+      width: 100%; margin-top: 8px; background: linear-gradient(135deg, #ff0044, #990022);
+      border: none; color: #fff; padding: 10px; font-weight: bold; font-size: 0.85rem;
+      letter-spacing: 1px; border-radius: 4px; cursor: pointer; text-transform: uppercase;
+    }
+    .launch-btn:active { transform: scale(0.98); opacity: 0.9; }
+
+    /* Randoms */
+    .randoms-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .polaroid-card {
+      background: #14151a; border: 1px solid var(--panel-border); padding: 8px;
+      border-radius: 4px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .polaroid-card img { width: 100%; height: 110px; object-fit: cover; border-radius: 2px; }
+
+    /* Stash */
+    .stash-drawer {
+      margin-top: 30px; background: rgba(17, 18, 22, 0.8);
+      border: 1px solid var(--accent-olive); border-radius: 6px; padding: 12px;
+    }
+    .stash-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-secondary {
+      flex: 1; background: #1a1c23; border: 1px solid var(--panel-border);
+      color: var(--text-main); padding: 8px; font-size: 0.75rem; border-radius: 4px; text-transform: uppercase;
+    }
+
+    #toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px);
+      background: var(--accent-cyan); color: #000; padding: 10px 20px; font-weight: bold;
+      font-size: 0.85rem; border-radius: 20px; transition: transform 0.3s; z-index: 1000;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+  <!-- Cloud Database Setup Modal -->
+  <div id="dbModal" style="display: none;">
+    <div class="modal-box">
+      <h2>System Initialization</h2>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">
+        Connect your secure Upstash Redis database. This keeps your files off the device and secured in the cloud.
+      </p>
+      <input type="text" id="dbUrl" class="input-field" placeholder="Upstash REST URL" />
+      <input type="password" id="dbToken" class="input-field" placeholder="Upstash REST Token" />
+      <button class="btn-primary" onclick="connectDatabase()">Connect & Sync</button>
+    </div>
+  </div>
+
+  <header>
+    <button class="nav-btn" onclick="changeDate(-1)">&lt;</button>
+    <div class="date-display">
+      <h1 id="dateTitle">TODAY</h1>
+      <span id="dateSubtitle">--/--/----</span>
+    </div>
+    <button class="nav-btn" onclick="changeDate(1)">&gt;</button>
+  </header>
+
+  <div id="cloudStatus">Checking connection...</div>
+
+  <div class="container" id="appInterface" style="display: none;">
+    <div class="section-title">Baseline Schedule (4 Slots)</div>
+    <div class="slots-grid" id="slotsContainer"></div>
+
+    <div class="section-title">Spontaneous Snapshots</div>
+    <div class="randoms-container" id="randomsContainer"></div>
+    <button class="btn-secondary" style="width: 100%; margin-top: 10px;" onclick="addRandomPhoto()">+ Snap Random Photo</button>
+
+    <div class="stash-drawer">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.8rem; font-weight: bold; color: var(--accent-cyan);">CONTENT STASH</span>
+        <span id="stashCount" style="font-size: 0.75rem; color: var(--text-muted);">0 items</span>
+      </div>
+      <div class="photo-preview-container" id="stashPreview" style="margin-top: 10px;"></div>
+      <div class="stash-actions">
+        <label class="btn-secondary" style="text-align: center; cursor: pointer;">
+          + Dump Photos
+          <input type="file" multiple accept="image/*" style="display: none;" onchange="uploadToStash(event)" />
+        </label>
+        <button class="btn-secondary" onclick="autoFillDay()">Auto-Fill Slots</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">Notice!</div>
+
+  <script>
+    let currentDate = new Date();
+    let appData = { days: {}, stash: [] };
+    let dbConfig = { url: '', token: '' };
+    let syncTimeout;
+
+    // Security & Initialization
+    function init() {
+      const savedConfig = localStorage.getItem('cloudConfig');
+      if (savedConfig) {
+        dbConfig = JSON.parse(savedConfig);
+        fetchCloudData();
+      } else {
+        document.getElementById('dbModal').style.display = 'flex';
+      }
+    }
+
+    function connectDatabase() {
+      dbConfig.url = document.getElementById('dbUrl').value.trim();
+      dbConfig.token = document.getElementById('dbToken').value.trim();
+      if (!dbConfig.url || !dbConfig.token) return alert("Requires both URL and Token");
+      
+      localStorage.setItem('cloudConfig', JSON.stringify(dbConfig));
+      document.getElementById('dbModal').style.display = 'none';
+      fetchCloudData();
+    }
+
+    // Cloud Fetching (Upstash Redis GET)
+    async function fetchCloudData() {
+      document.getElementById('cloudStatus').innerText = "SYNCING CLOUD DATA...";
+      try {
+        const response = await fetch(`${dbConfig.url}/get/launchpadData`, {
+          headers: { Authorization: `Bearer ${dbConfig.token}` }
+        });
+        const json = await response.json();
+        
+        if (json.result) {
+          appData = JSON.parse(json.result);
+        }
+        
+        document.getElementById('cloudStatus').innerText = "SYSTEM SECURE. CLOUD SYNCED.";
+        document.getElementById('appInterface').style.display = 'block';
+        render();
+      } catch (err) {
+        document.getElementById('cloudStatus').innerText = "CONNECTION ERROR. CHECK CREDENTIALS.";
+        localStorage.removeItem('cloudConfig');
+        document.getElementById('dbModal').style.display = 'flex';
+      }
+    }
+
+    // Cloud Saving (Upstash Redis SET)
+    function saveToCloud() {
+      document.getElementById('cloudStatus').innerText = "SAVING TO CLOUD...";
+      clearTimeout(syncTimeout);
+      syncTimeout = setTimeout(async () => {
+        try {
+          await fetch(`${dbConfig.url}/set/launchpadData`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${dbConfig.token}` },
+            body: JSON.stringify(appData)
+          });
+          document.getElementById('cloudStatus').innerText = "ALL CHANGES SAVED.";
+        } catch (err) {
+          document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
+        }
+      }, 1000); // Debounce to prevent spamming the database
+    }
+
+    // Image Compressor (Prevents Database Bloat)
+    function compressImage(file, callback) {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = event => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const max_size = 800; // Resize to max 800px width/height for storage efficiency
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height && width > max_size) {
+            height *= max_size / width;
+            width = max_size;
+          } else if (height > max_size) {
+            width *= max_size / height;
+            height = max_size;
+          }
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          callback(canvas.toDataURL('image/jpeg', 0.7)); // Compress to 70% quality JPG
+        }
+      }
+    }
+
+    // Core Architecture
+    function getDateKey(date) { return date.toISOString().split('T')[0]; }
+
+    function getDayData(dateKey) {
+      if (!appData.days[dateKey]) {
+        appData.days[dateKey] = {
+          slots: [ { images: [], caption: "" }, { images: [], caption: "" }, { images: [], caption: "" }, { images: [], caption: "" } ],
+          randoms: []
+        };
+      }
+      return appData.days[dateKey];
+    }
+
+    // Render Engine
+    function render() {
+      const dateKey = getDateKey(currentDate);
+      const dayData = getDayData(dateKey);
+
+      const options = { weekday: 'short', month: 'short', day: 'numeric' };
+      document.getElementById('dateTitle').innerText = currentDate.toLocaleDateString('en-US', options);
+      document.getElementById('dateSubtitle').innerText = dateKey;
+
+      const slotsContainer = document.getElementById('slotsContainer');
+      slotsContainer.innerHTML = '';
+      
+      dayData.slots.forEach((slot, index) => {
+        const slotEl = document.createElement('div');
+        slotEl.className = 'slot-card';
+        slotEl.innerHTML = `
+          <div class="slot-header">
+            <span class="slot-number">SLOT 0${index + 1}</span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">${slot.images.length} photo(s)</span>
+          </div>
+          <div class="photo-preview-container">
+            ${slot.images.map((img, imgIndex) => `<img src="${img}" class="photo-thumb" onclick="removeSlotImage(${index}, ${imgIndex})"/>`).join('')}
+            <label class="upload-btn-label">
+              + <input type="file" accept="image/*" multiple style="display: none;" onchange="uploadSlotImages(event, ${index})" />
+            </label>
+          </div>
+          <textarea placeholder="Write caption or hashtags..." rows="2" onchange="updateCaption(${index}, this.value)">${slot.caption}</textarea>
+          <button class="launch-btn" onclick="launchPost(${index})">🚀 Launch Slot 0${index + 1}</button>
+        `;
+        slotsContainer.appendChild(slotEl);
+      });
+
+      const randomsContainer = document.getElementById('randomsContainer');
+      randomsContainer.innerHTML = '';
+      dayData.randoms.forEach((rand, index) => {
+        const randEl = document.createElement('div');
+        randEl.className = 'polaroid-card';
+        randEl.innerHTML = `
+          <img src="${rand.image}" onclick="removeRandom(${index})" />
+          <textarea placeholder="Quick caption..." rows="1" onchange="updateRandomCaption(${index}, this.value)">${rand.caption}</textarea>
+          <button class="launch-btn" style="padding: 6px; font-size: 0.7rem;" onclick="launchRandom(${index})">🚀 Launch</button>
+        `;
+        randomsContainer.appendChild(randEl);
+      });
+
+      document.getElementById('stashCount').innerText = `${appData.stash.length} items`;
+      document.getElementById('stashPreview').innerHTML = appData.stash.map((img, i) => `<img src="${img}" class="photo-thumb" onclick="removeFromStash(${i})"/>`).join('');
+    }
+
+    // Interaction Handlers
+    function changeDate(days) { currentDate.setDate(currentDate.getDate() + days); render(); }
+
+    function uploadSlotImages(event, slotIndex) {
+      const dateKey = getDateKey(currentDate);
+      Array.from(event.target.files).forEach(file => {
+        compressImage(file, compressedData => {
+          appData.days[dateKey].slots[slotIndex].images.push(compressedData);
+          saveToCloud(); render();
+        });
+      });
+    }
+
+    function removeSlotImage(slotIndex, imgIndex) {
+      const dateKey = getDateKey(currentDate);
+      appData.days[dateKey].slots[slotIndex].images.splice(imgIndex, 1);
+      saveToCloud(); render();
+    }
+
+    function updateCaption(slotIndex, text) {
+      appData.days[getDateKey(currentDate)].slots[slotIndex].caption = text;
+      saveToCloud();
+    }
+
+    function addRandomPhoto() {
+      const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
+      input.onchange = e => {
+        if (e.target.files[0]) {
+          compressImage(e.target.files[0], compressedData => {
+            appData.days[getDateKey(currentDate)].randoms.push({ image: compressedData, caption: "" });
+            saveToCloud(); render();
+          });
+        }
+      };
+      input.click();
+    }
+
+    function updateRandomCaption(index, text) {
+      appData.days[getDateKey(currentDate)].randoms[index].caption = text;
+      saveToCloud();
+    }
+    
+    function removeRandom(index) {
+      appData.days[getDateKey(currentDate)].randoms.splice(index, 1);
+      saveToCloud(); render();
+    }
+
+    function uploadToStash(event) {
+      Array.from(event.target.files).forEach(file => {
+        compressImage(file, compressedData => {
+          appData.stash.push(compressedData);
+          saveToCloud(); render();
+        });
+      });
+    }
+
+    function removeFromStash(index) { appData.stash.splice(index, 1); saveToCloud(); render(); }
+
+    function autoFillDay() {
+      const dateKey = getDateKey(currentDate);
+      appData.days[dateKey].slots.forEach(slot => {
+        if (slot.images.length === 0 && appData.stash.length > 0) {
+          slot.images.push(appData.stash.shift());
+        }
+      });
+      saveToCloud(); render();
+    }
+
+    // Launchers
+    function launchPost(slotIndex) {
+      const caption = getDayData(getDateKey(currentDate)).slots[slotIndex].caption;
+      executeLaunch(caption);
+    }
+
+    function launchRandom(index) {
+      const caption = getDayData(getDateKey(currentDate)).randoms[index].caption;
+      executeLaunch(caption);
+    }
+
+    function executeLaunch(caption) {
+      if (caption) {
+        navigator.clipboard.writeText(caption).then(() => {
+          showToast("Caption Copied! Opening OnlyFans...");
+          setTimeout(() => window.open('https://onlyfans.com', '_blank'), 1200);
+        });
+      } else {
+        showToast("Opening OnlyFans...");
+        window.open('https://onlyfans.com', '_blank');
+      }
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg; toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
+
