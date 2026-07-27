@@ -138,6 +138,72 @@
         }
         .add-time-btn:active { border-style: inset; }
 
+        /* Content Stash Drawer */
+        .stash-drawer {
+            background: white;
+            border: 3px solid var(--baby-blue);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 3px 3px 0px var(--baby-pink);
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .stash-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: var(--hot-pink);
+            font-family: 'Comic Sans MS', sans-serif;
+        }
+
+        .stash-preview-container {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+            min-height: 90px;
+            align-items: center;
+            border: 2px dashed var(--baby-pink);
+            background: #fdfdfd;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .stash-thumb {
+            width: 70px;
+            height: 70px;
+            border-radius: 5px;
+            object-fit: cover;
+            border: 2px outset var(--baby-blue);
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+
+        .stash-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stash-btn {
+            flex: 1;
+            background: var(--baby-blue);
+            border: 2px outset var(--dark-blue);
+            color: #000;
+            padding: 10px;
+            font-size: 13px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .stash-btn:active { border-style: inset; }
+
         /* Layout for Posts */
         .grid-container {
             display: grid;
@@ -236,6 +302,24 @@
         <button class="settings-btn" onclick="openSettings()">⚙️ Edit Schedule</button>
     </div>
 
+    <!-- Content Stash -->
+    <div class="stash-drawer">
+        <div class="stash-header">
+            <span>★ Content Stash</span>
+            <span id="stashCount" style="font-size: 12px; color: #666;">0 items</span>
+        </div>
+        <div class="stash-preview-container" id="stashPreview">
+            <span style="font-size: 12px; color: #aaa;">Dump photos here to use later...</span>
+        </div>
+        <div class="stash-actions">
+            <label class="stash-btn">
+                + Dump Photos
+                <input type="file" multiple accept="image/*" style="display: none;" onchange="uploadToStash(event)">
+            </label>
+            <button class="stash-btn" onclick="autoFillDay()" style="background: var(--baby-pink); border-color: var(--hot-pink);">✨ Auto-Slot</button>
+        </div>
+    </div>
+
     <!-- Settings Modal -->
     <div class="modal-overlay" id="settingsModal">
         <div class="modal-content">
@@ -272,9 +356,9 @@
 
     <script>
         // Core Data
-        // Default to 4 times if no custom schedule is saved yet
         let scheduleTimes = JSON.parse(localStorage.getItem('myCustomSchedule')) || ['09:00', '13:00', '18:00', '22:00'];
         let randomSlotCount = 3; 
+        let photoStash = []; // Holds object URLs for the current session
 
         window.onload = function() {
             renderApp();
@@ -282,7 +366,6 @@
 
         // --- CORE RENDER ENGINE ---
         function renderApp() {
-            // Sort times chronologically
             scheduleTimes.sort();
 
             const schedContainer = document.getElementById('scheduled-container');
@@ -304,7 +387,6 @@
             }
         }
 
-        // Generate HTML for a single slot
         function createSlotHTML(id, title) {
             return `
                 <div class="slot" id="slot-${id}">
@@ -319,13 +401,62 @@
             `;
         }
 
-        // Formats "14:30" to "2:30 PM"
         function formatTime12h(time24h) {
             let [hours, minutes] = time24h.split(':');
             let ampm = hours >= 12 ? 'PM' : 'AM';
             hours = hours % 12;
             hours = hours ? hours : 12; 
             return `${hours}:${minutes} ${ampm}`;
+        }
+
+        // --- STASH & AUTO-FILL LOGIC ---
+        function uploadToStash(event) {
+            const files = Array.from(event.target.files);
+            files.forEach(file => {
+                // Keep original quality in local memory
+                photoStash.push(URL.createObjectURL(file)); 
+            });
+            renderStash();
+        }
+
+        function renderStash() {
+            document.getElementById('stashCount').innerText = `${photoStash.length} items`;
+            const previewContainer = document.getElementById('stashPreview');
+            
+            if (photoStash.length === 0) {
+                previewContainer.innerHTML = '<span style="font-size: 12px; color: #aaa;">Dump photos here to use later...</span>';
+                return;
+            }
+
+            previewContainer.innerHTML = photoStash.map((url, index) => 
+                `<img src="${url}" class="stash-thumb" onclick="removeFromStash(${index})" title="Click to remove">`
+            ).join('');
+        }
+
+        function removeFromStash(index) {
+            URL.revokeObjectURL(photoStash[index]); // Free up browser memory
+            photoStash.splice(index, 1);
+            renderStash();
+        }
+
+        function autoFillDay() {
+            // Find all slots in the Daily Schedule container
+            const schedContainer = document.getElementById('scheduled-container');
+            const slots = schedContainer.querySelectorAll('.slot');
+
+            slots.forEach(slot => {
+                const img = slot.querySelector('.image-preview');
+                // If the slot is empty and we have photos in the stash
+                if ((!img.src || img.style.display === 'none') && photoStash.length > 0) {
+                    const nextPhotoUrl = photoStash.shift(); // Pull from stash
+                    
+                    img.src = nextPhotoUrl;
+                    img.style.display = 'block';
+                    slot.querySelector('.btn-group').style.display = 'flex';
+                    slot.querySelector('input[type="file"]').value = ""; // Reset input just in case
+                }
+            });
+            renderStash();
         }
 
         // --- SETTINGS MODAL LOGIC ---
@@ -361,7 +492,6 @@
         }
 
         function saveAndCloseSettings() {
-            // Gather all times from the inputs
             const inputs = document.querySelectorAll('.time-input');
             let newTimes = [];
             inputs.forEach(input => {
@@ -372,7 +502,7 @@
             localStorage.setItem('myCustomSchedule', JSON.stringify(scheduleTimes));
             
             document.getElementById('settingsModal').style.display = 'none';
-            renderApp(); // Re-render the main dashboard with the new times
+            renderApp();
         }
 
         function addRandomSlot() {
@@ -389,7 +519,6 @@
             const file = event.target.files[0];
             if (file) {
                 const imgElement = document.getElementById(`preview-${id}`);
-                // Creates a local URL in the browser memory (No downloading, full quality)
                 imgElement.src = URL.createObjectURL(file);
                 imgElement.style.display = 'block';
                 
