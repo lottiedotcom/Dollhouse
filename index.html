@@ -3,7 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Queue Manager ★</title>
+    <title>Queue Manager (★^O^★)</title>
+    
+    <!-- App Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#ffb6c1">
+
     <style>
         /* 2000s Baby Pink & Blue Aesthetic */
         :root {
@@ -161,7 +170,7 @@
     <!-- Cloud Vault Setup Modal -->
     <div id="dbModal" class="modal-overlay">
         <div class="modal-content">
-            <h2>★ Vault Setup ★</h2>
+            <h2>(★) Vault Setup (★)</h2>
             <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Connect your secure Supabase Vault to save high-res files.</p>
             <input type="text" id="dbUrl" class="input-field" placeholder="Supabase Project URL" />
             <input type="password" id="dbKey" class="input-field" placeholder="Supabase Service Role Key" />
@@ -181,8 +190,8 @@
     </div>
 
     <div class="header">
-        <h1>★ Queue Manager ★</h1>
-        <button class="btn-style" onclick="openSettings()">⚙️ Schedule</button>
+        <h1>(★) Queue Manager</h1>
+        <button class="btn-style" onclick="openSettings()">[*⚙] Schedule</button>
     </div>
 
     <div id="cloudStatus">Checking connection...</div>
@@ -192,7 +201,7 @@
         <!-- Content Stash -->
         <div class="stash-drawer">
             <div class="stash-header">
-                <span>★ Content Stash</span>
+                <span>(★) Content Stash</span>
                 <span id="stashCount" style="font-size: 12px; color: #666;">0 items</span>
             </div>
             <div class="stash-preview-container" id="stashPreview">
@@ -203,20 +212,20 @@
                     + Dump Photos
                     <input type="file" multiple accept="image/*" style="display: none;" onchange="uploadToStash(event)">
                 </label>
-                <button class="btn-style" onclick="autoFillDay()" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);">✨ Auto-Slot</button>
+                <button class="btn-style" onclick="autoFillDay()" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);">(ﾉ◕ヮ◕)ﾉ Auto-Slot</button>
             </div>
         </div>
 
         <div class="grid-container">
             <!-- Scheduled Column -->
             <div class="section">
-                <h2>★ Daily Schedule ★</h2>
+                <h2>(★) Daily Schedule</h2>
                 <div id="scheduled-container"></div>
             </div>
 
             <!-- Random Column -->
             <div class="section">
-                <h2>★ Spontaneous ★</h2>
+                <h2>(★) Spontaneous</h2>
                 <div id="random-container"></div>
                 <button class="btn-style" style="width: 100%; margin-top: 15px;" onclick="addRandomSlot()">+ Add Random Slot</button>
             </div>
@@ -224,19 +233,22 @@
     </div>
 
     <script>
+        // Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+
         // Supabase Vault Credentials
         let dbConfig = { url: '', key: '' };
         let syncTimeout;
         
-        // Main App State (Stores Filenames, not the massive files)
         let appData = {
             schedule: ['09:00', '13:00', '18:00', '22:00'],
             randomSlotCount: 3,
             stash: [],
-            slots: {} // { caption: "", images: ["filename.jpg"] }
+            slots: {}
         };
 
-        // Holds actual blob URLs for rendering UI without downloading multiple times
         let loadedImages = {};
 
         // --- SUPABASE CLOUD SYNC ---
@@ -264,7 +276,6 @@
         async function fetchCloudData() {
             document.getElementById('cloudStatus').innerText = "SYNCING WITH VAULT...";
             try {
-                // Fetch the JSON state file from the storage bucket
                 const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/state.json`, {
                     headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
                 });
@@ -274,10 +285,9 @@
                     appData = { ...appData, ...json };
                 }
 
-                document.getElementById('cloudStatus').innerText = "☁️ VAULT SYNCED & SECURE";
+                document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
                 document.getElementById('appInterface').style.display = 'block';
                 
-                // Fetch all images that are part of the state
                 await preloadAllImages();
                 renderApp();
 
@@ -295,7 +305,7 @@
                 try {
                     const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
                     await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
-                        method: 'POST', // Supabase treats POST as upload/upsert if header is present
+                        method: 'POST',
                         headers: { 
                             'apikey': dbConfig.key, 
                             'Authorization': `Bearer ${dbConfig.key}`,
@@ -304,20 +314,18 @@
                         },
                         body: blob
                     });
-                    document.getElementById('cloudStatus').innerText = "☁️ ALL CHANGES SAVED";
+                    document.getElementById('cloudStatus').innerText = "(★) ALL CHANGES SAVED";
                 } catch (err) {
                     document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
                 }
             }, 1000);
         }
 
-        // --- RAW FILE HANDLING (NO COMPRESSION) ---
+        // --- RAW FILE HANDLING ---
         async function uploadFileToVault(file) {
             document.getElementById('cloudStatus').innerText = "UPLOADING HIGH-RES FILE...";
-            // Create a unique filename
             const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
             
-            // Upload directly to Supabase storage bucket named "vault"
             await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
                 method: 'POST',
                 headers: { 
@@ -328,20 +336,17 @@
                 body: file
             });
 
-            // Cache it locally so it renders immediately
             loadedImages[fileName] = URL.createObjectURL(file);
-            document.getElementById('cloudStatus').innerText = "☁️ VAULT SYNCED & SECURE";
+            document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             return fileName;
         }
 
         async function preloadAllImages() {
-            // Gathers all filenames from stash and slots
             let filesToFetch = [...appData.stash];
             Object.values(appData.slots).forEach(slot => {
                 if (slot.images) filesToFetch.push(...slot.images);
             });
 
-            // Download raw files from Vault and create object URLs for rendering
             for (let fileName of filesToFetch) {
                 if (!loadedImages[fileName]) {
                     try {
@@ -393,8 +398,8 @@
                     <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
                     
                     <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
-                        <button class="action-btn" onclick="prepForPost('${id}')">✨ Prep for OF (Copy & Bump)</button>
-                        <button class="action-btn clear" onclick="clearSlot('${id}')">❌ Clear Slot</button>
+                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Share & Copy Caption</button>
+                        <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot</button>
                     </div>
                 </div>
             `;
@@ -515,36 +520,48 @@
             saveToCloud();
         }
 
-        // --- PREP FOR OF (The Android Workaround) ---
+        // --- DIRECT MOBILE SHARE ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
 
-            // 1. Copy text to clipboard
             if (data.caption) {
                 try {
                     await navigator.clipboard.writeText(data.caption);
-                    alert("✅ Caption copied!");
+                    alert("caption copied (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
                 } catch (err) {
-                    alert("Couldn't copy caption. You may need to copy it manually.");
+                    alert("couldnt copy caption (╥_╥)");
                 }
             }
 
-            // 2. Download images to bump them to the top of Recents
-            if (data.images && data.images.length > 0) {
-                data.images.forEach((fileName, index) => {
-                    const url = loadedImages[fileName];
-                    if(url) {
-                        const a = document.createElement('a');
-                        a.href = url;
-                        // Use original extension if possible, default to jpg
-                        const ext = fileName.split('.').pop() || 'jpg';
-                        a.download = `OF_Post_${id}_Img_${index + 1}.${ext}`; 
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
+            if (data.images && data.images.length > 0 && navigator.share) {
+                try {
+                    let filesArray = [];
+                    for (let fileName of data.images) {
+                        const url = loadedImages[fileName];
+                        if (url) {
+                            const response = await fetch(url);
+                            const blob = await response.blob();
+                            const ext = fileName.split('.').pop() || 'jpg';
+                            const file = new File([blob], fileName, { type: blob.type || `image/${ext}` });
+                            filesArray.push(file);
+                        }
                     }
-                });
+
+                    if (navigator.canShare && navigator.canShare({ files: filesArray })) {
+                        await navigator.share({
+                            files: filesArray,
+                            title: 'ready to post',
+                            text: data.caption || ''
+                        });
+                    } else {
+                        alert("sharing files not supported on this browser (╥_╥)");
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        alert("share failed (╯°□°）╯");
+                    }
+                }
             }
         }
 
