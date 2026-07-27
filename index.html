@@ -159,6 +159,7 @@
         }
         .action-btn:active { border-style: inset; }
         
+        .action-btn.posted { background: var(--baby-blue); border-color: var(--dark-blue); }
         .action-btn.clear { background: #fff; border: 2px outset #ccc; color: #666; font-size: 12px; padding: 8px; }
 
         .time-row { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -398,7 +399,8 @@
                     <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
                     
                     <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
-                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Share & Copy Caption</button>
+                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Dump to Phone & Copy Caption</button>
+                        <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Auto-Archive)</button>
                         <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot</button>
                     </div>
                 </div>
@@ -520,49 +522,67 @@
             saveToCloud();
         }
 
-        // --- DIRECT MOBILE SHARE ---
+        // --- PREP POST & AUTO DUMP ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
 
+            // 1. Copy caption
             if (data.caption) {
                 try {
                     await navigator.clipboard.writeText(data.caption);
-                    alert("caption copied (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
                 } catch (err) {
-                    alert("couldnt copy caption (╥_╥)");
+                    console.error("Caption copy failed");
                 }
             }
 
-            if (data.images && data.images.length > 0 && navigator.share) {
+            // 2. Download with QUEUE_DUMP prefix so they group together in downloads
+            if (data.images && data.images.length > 0) {
+                data.images.forEach((fileName, index) => {
+                    const url = loadedImages[fileName];
+                    if (url) {
+                        const a = document.createElement('a');
+                        a.href = url;
+                        const ext = fileName.split('.').pop() || 'jpg';
+                        a.download = `QUEUE_DUMP_img${index + 1}_${Date.now()}.${ext}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                });
+            }
+
+            alert("caption copied & photos sent to downloads (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+        }
+
+        async function markAsPosted(id) {
+            const data = appData.slots[id];
+            if (!data || !data.images) return clearSlot(id);
+
+            document.getElementById('cloudStatus').innerText = "ARCHIVING POSTED FILES...";
+
+            for (let fileName of data.images) {
                 try {
-                    let filesArray = [];
-                    for (let fileName of data.images) {
-                        const url = loadedImages[fileName];
-                        if (url) {
-                            const response = await fetch(url);
-                            const blob = await response.blob();
-                            const ext = fileName.split('.').pop() || 'jpg';
-                            const file = new File([blob], fileName, { type: blob.type || `image/${ext}` });
-                            filesArray.push(file);
-                        }
-                    }
-
-                    if (navigator.canShare && navigator.canShare({ files: filesArray })) {
-                        await navigator.share({
-                            files: filesArray,
-                            title: 'ready to post',
-                            text: data.caption || ''
-                        });
-                    } else {
-                        alert("sharing files not supported on this browser (╥_╥)");
-                    }
+                    await fetch(`${dbConfig.url}/storage/v1/object/move`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': dbConfig.key,
+                            'Authorization': `Bearer ${dbConfig.key}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            bucketId: 'vault',
+                            sourceKey: fileName,
+                            destinationKey: `posted/${fileName}`
+                        })
+                    });
                 } catch (err) {
-                    if (err.name !== 'AbortError') {
-                        alert("share failed (╯°□°）╯");
-                    }
+                    console.error("Failed to move file in cloud:", fileName);
                 }
             }
+
+            clearSlot(id);
+            alert("moved to posted folder & cleared (★^O^★)");
         }
 
         // --- SETTINGS MODAL LOGIC ---
