@@ -246,14 +246,33 @@
             border-radius: 4px;
         }
 
-        .image-preview {
-            width: 100%;
-            max-height: 250px;
-            object-fit: contain;
-            border: 2px inset #ccc;
-            margin: 10px 0;
+        /* Gallery inside slots */
+        .slot-gallery {
             display: none;
-            background: #eee;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 10px 5px;
+            background: #fff0f5;
+            border: 2px inset var(--baby-pink);
+            border-radius: 5px;
+            margin: 10px 0;
+            align-items: flex-start;
+        }
+
+        .gallery-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex-shrink: 0;
+            width: 120px;
+        }
+
+        .gallery-item img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border: 2px solid var(--baby-blue);
+            border-radius: 5px;
         }
 
         /* File Input & Buttons */
@@ -276,12 +295,12 @@
         .action-btn {
             background: var(--baby-pink);
             border: 2px outset var(--hot-pink);
-            padding: 10px;
+            padding: 8px;
             font-weight: bold;
             cursor: pointer;
             border-radius: 5px;
             width: 100%;
-            font-size: 14px;
+            font-size: 12px;
         }
 
         .action-btn:active { border-style: inset; }
@@ -316,7 +335,7 @@
                 + Dump Photos
                 <input type="file" multiple accept="image/*" style="display: none;" onchange="uploadToStash(event)">
             </label>
-            <button class="stash-btn" onclick="autoFillDay()" style="background: var(--baby-pink); border-color: var(--hot-pink);">✨ Auto-Slot</button>
+            <button class="stash-btn" onclick="autoFillDay()" style="background: var(--baby-pink); border-color: var(--hot-pink);">✨ Auto-Slot All</button>
         </div>
     </div>
 
@@ -358,7 +377,7 @@
         // Core Data
         let scheduleTimes = JSON.parse(localStorage.getItem('myCustomSchedule')) || ['09:00', '13:00', '18:00', '22:00'];
         let randomSlotCount = 3; 
-        let photoStash = []; // Holds object URLs for the current session
+        let photoStash = []; 
 
         window.onload = function() {
             renderApp();
@@ -391,11 +410,12 @@
             return `
                 <div class="slot" id="slot-${id}">
                     <div class="slot-title">${title}</div>
-                    <input type="file" accept="image/*" onchange="loadImage(event, '${id}')">
-                    <img id="preview-${id}" class="image-preview">
+                    <input type="file" multiple accept="image/*" onchange="loadImages(event, '${id}')">
+                    
+                    <div class="slot-gallery" id="gallery-${id}"></div>
+                    
                     <div class="btn-group" id="btnGroup-${id}">
-                        <button class="action-btn" onclick="copyToClipboard('preview-${id}')">📋 Copy Image</button>
-                        <button class="action-btn clear" onclick="clearSlot('${id}', this)">❌ Clear Slot</button>
+                        <button class="action-btn clear" onclick="clearSlot('${id}', this)">❌ Clear Entire Slot</button>
                     </div>
                 </div>
             `;
@@ -413,10 +433,10 @@
         function uploadToStash(event) {
             const files = Array.from(event.target.files);
             files.forEach(file => {
-                // Keep original quality in local memory
                 photoStash.push(URL.createObjectURL(file)); 
             });
             renderStash();
+            event.target.value = ""; 
         }
 
         function renderStash() {
@@ -434,28 +454,37 @@
         }
 
         function removeFromStash(index) {
-            URL.revokeObjectURL(photoStash[index]); // Free up browser memory
+            URL.revokeObjectURL(photoStash[index]); 
             photoStash.splice(index, 1);
             renderStash();
         }
 
         function autoFillDay() {
-            // Find all slots in the Daily Schedule container
             const schedContainer = document.getElementById('scheduled-container');
-            const slots = schedContainer.querySelectorAll('.slot');
+            const slots = Array.from(schedContainer.querySelectorAll('.slot'));
 
-            slots.forEach(slot => {
-                const img = slot.querySelector('.image-preview');
-                // If the slot is empty and we have photos in the stash
-                if ((!img.src || img.style.display === 'none') && photoStash.length > 0) {
-                    const nextPhotoUrl = photoStash.shift(); // Pull from stash
-                    
-                    img.src = nextPhotoUrl;
-                    img.style.display = 'block';
-                    slot.querySelector('.btn-group').style.display = 'flex';
-                    slot.querySelector('input[type="file"]').value = ""; // Reset input just in case
-                }
-            });
+            if (slots.length === 0) {
+                alert("You don't have any scheduled slots to fill!");
+                return;
+            }
+            if (photoStash.length === 0) {
+                alert("Your stash is empty!");
+                return;
+            }
+
+            // Round-robin distribution: deals photos one by one into the slots like playing cards
+            let slotIndex = 0;
+            while (photoStash.length > 0) {
+                const photoUrl = photoStash.shift(); 
+                const targetSlot = slots[slotIndex];
+                const id = targetSlot.id.replace('slot-', '');
+                
+                addImageToSlot(id, photoUrl);
+                
+                // Move to the next slot, loop back to the beginning if we hit the end
+                slotIndex = (slotIndex + 1) % slots.length;
+            }
+            
             renderStash();
         }
 
@@ -515,22 +544,42 @@
         }
 
         // --- IMAGE & CLIPBOARD LOGIC ---
-        function loadImage(event, id) {
-            const file = event.target.files[0];
-            if (file) {
-                const imgElement = document.getElementById(`preview-${id}`);
-                imgElement.src = URL.createObjectURL(file);
-                imgElement.style.display = 'block';
-                
-                const btnGroup = document.getElementById(`btnGroup-${id}`);
-                btnGroup.style.display = 'flex';
-            }
+        function loadImages(event, id) {
+            const files = Array.from(event.target.files);
+            files.forEach(file => {
+                const url = URL.createObjectURL(file);
+                addImageToSlot(id, url);
+            });
+            event.target.value = ""; 
+        }
+
+        function addImageToSlot(id, url) {
+            const gallery = document.getElementById(`gallery-${id}`);
+            const btnGroup = document.getElementById(`btnGroup-${id}`);
+            
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'gallery-item';
+            
+            const img = document.createElement('img');
+            img.src = url;
+            
+            const copyBtn = document.createElement('button');
+            copyBtn.innerText = '📋 Copy';
+            copyBtn.className = 'action-btn';
+            copyBtn.onclick = () => copyToClipboard(url, copyBtn);
+            
+            itemDiv.appendChild(img);
+            itemDiv.appendChild(copyBtn);
+            
+            gallery.appendChild(itemDiv);
+            gallery.style.display = 'flex';
+            btnGroup.style.display = 'flex';
         }
 
         function clearSlot(id, btnElement) {
-            const imgElement = document.getElementById(`preview-${id}`);
-            imgElement.src = "";
-            imgElement.style.display = 'none';
+            const gallery = document.getElementById(`gallery-${id}`);
+            gallery.innerHTML = "";
+            gallery.style.display = 'none';
             
             const btnGroup = document.getElementById(`btnGroup-${id}`);
             btnGroup.style.display = 'none';
@@ -539,10 +588,9 @@
             if (fileInput) fileInput.value = "";
         }
 
-        async function copyToClipboard(previewId) {
-            const imgElement = document.getElementById(previewId);
+        async function copyToClipboard(url, btnElement) {
             try {
-                const response = await fetch(imgElement.src);
+                const response = await fetch(url);
                 const blob = await response.blob();
                 
                 await navigator.clipboard.write([
@@ -550,10 +598,22 @@
                         [blob.type]: blob
                     })
                 ]);
-                alert("Copied! Paste directly into the OF app.");
+                
+                // Visual feedback on the button
+                const originalText = btnElement.innerText;
+                const originalBg = btnElement.style.background;
+                
+                btnElement.innerText = "✅ Copied!";
+                btnElement.style.background = "#90ee90"; // Light green flash
+                
+                setTimeout(() => {
+                    btnElement.innerText = originalText;
+                    btnElement.style.background = originalBg;
+                }, 2000);
+                
             } catch (err) {
                 console.error("Clipboard error:", err);
-                alert("Failed to copy. Your browser might restrict clipboard access here.");
+                alert("Failed to copy. Your browser might restrict clipboard access.");
             }
         }
     </script>
