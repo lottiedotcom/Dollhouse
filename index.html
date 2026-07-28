@@ -240,24 +240,14 @@
         </div>
     </div>
 
-    <!-- Settings Modal -->
+    <!-- Settings Modal (Alarm Removed) -->
     <div class="modal-overlay" id="settingsModal">
         <div class="modal-content">
             <h2>Your Schedule</h2>
             <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Build your exact daily routine below.</p>
             <div id="scheduleInputsContainer"></div>
             <button class="btn-style" style="width: 100%; margin: 15px 0; background: var(--baby-pink);" onclick="addTimeInput()">+ Add Time</button>
-            
-            <hr style="border: 1px dashed #ccc; margin: 15px 0;">
-            <h3 style="margin-top:0;">(★) Daily Reminder</h3>
-            <p style="font-size: 11px; color:#666;">Play a sound & notify me to schedule 3 days out:</p>
-            <div style="display:flex; gap:10px; justify-content:center; align-items:center; margin-bottom:15px;">
-                <input type="time" id="reminderTimeInput" class="input-field" style="margin:0; width:120px;">
-                <button class="btn-style" onclick="requestNotificationPermission()" style="font-size:10px;">Enable Alerts</button>
-            </div>
-
             <button class="btn-style" style="width: 100%;" onclick="saveAndCloseSettings()">Save & Close</button>
-            
             <hr style="border: 1px dashed #ccc; margin: 20px 0;">
             <button class="btn-style" style="width: 100%; background: #ff9999; color: white; border-color: #cc0000;" onclick="resetCredentials()">(★) Disconnect / Reset Vault</button>
         </div>
@@ -366,7 +356,10 @@
             </div>
         </div>
 
+        <!-- NEW: Manual Save Drafts Button -->
         <div style="text-align: center; margin-top: 30px;">
+            <button class="btn-style" style="width: 100%; max-width: 400px; padding: 15px; margin-bottom: 10px; background: var(--baby-blue); color: var(--dark-blue); font-size: 16px; border: 3px outset var(--dark-blue);" onclick="forceSaveDrafts()">💾 Save Drafts (Photos & Captions)</button>
+            
             <button class="btn-style clear" style="width: 100%; max-width: 400px; padding: 15px; background: #fff; border: 3px outset #ccc; color: #cc0000; font-weight: bold;" onclick="clearAllSlots()">( ✖ _ ✖ ) Clear All Slots</button>
         </div>
     </div>
@@ -439,17 +432,6 @@
             document.getElementById('btn-tab-kaomoji').className = tab === 'kaomoji' ? 'tab-btn active' : 'tab-btn';
 
             document.getElementById('headerCounters').style.display = tab === 'queue' ? 'block' : 'none';
-        }
-
-        // Notification Permission Request
-        function requestNotificationPermission() {
-            if ("Notification" in window) {
-                Notification.requestPermission().then(permission => {
-                    if(permission === "granted") alert("Notifications enabled! Keep this tab open/backgrounded to hear the alarm.");
-                });
-            } else {
-                alert("Your browser doesn't support notifications.");
-            }
         }
 
         window.onload = init;
