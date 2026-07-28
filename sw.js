@@ -1,4 +1,4 @@
-const CACHE_NAME = 'queue-manager-v2';
+const CACHE_NAME = 'queue-manager-v3';
 const urlsToCache = [
     '/',
     '/index.html',
@@ -20,7 +20,7 @@ self.addEventListener('activate', event => {
             return Promise.all(
                 cacheNames.map(cache => {
                     if (cache !== CACHE_NAME) {
-                        return caches.delete(cache); // Wipe old caches
+                        return caches.delete(cache);
                     }
                 })
             );
@@ -30,7 +30,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    // NETWORK FIRST STRATEGY: Always fetch fresh code, fallback to cache only if offline.
+    // NETWORK FIRST STRATEGY
     event.respondWith(
         fetch(event.request)
             .then(response => {
