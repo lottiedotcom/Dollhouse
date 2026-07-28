@@ -212,7 +212,7 @@ function formatTime(time24h) {
     return `${hours}:${minutes} ${ampm}`;
 }
 
-// Reverted to sequential, 1-by-1 uploading with accurate progress text
+// STRICT 1-by-1 Sequential Upload
 async function uploadDirectToSlot(event, id) {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
@@ -288,12 +288,17 @@ function previewSelectedFiles(event) {
     document.getElementById('uploadStatusText').innerText = `${pendingFilesToUpload.length} file(s) selected (${totalMB.toFixed(1)}MB total) ready to upload.`;
 }
 
-// Reverted to sequential, 1-by-1 uploading for the Stash as well
+// STRICT 1-by-1 Sequential Stash Upload with Smart Tag Reading
 async function uploadAndSaveTag() {
     if (pendingFilesToUpload.length === 0) return alert("Please click '+ Select Photos / GIFs' first!");
     
-    const tagInput = document.getElementById('stashTagInput').value.trim();
-    if (!tagInput) return alert("Please type or select a Tag / Set Name first!");
+    // Check text input first. If empty, check dropdown select.
+    let tagInput = document.getElementById('newUploadTagInput').value.trim();
+    if (!tagInput) {
+        tagInput = document.getElementById('uploadTagSelect').value;
+    }
+
+    if (!tagInput) return alert("Please select an existing tag from the dropdown or type a new one!");
 
     if (!appData.savedTags) appData.savedTags = [];
     if (!appData.savedTags.includes(tagInput)) appData.savedTags.push(tagInput);
@@ -317,6 +322,7 @@ async function uploadAndSaveTag() {
 
     pendingFilesToUpload = [];
     document.getElementById('stashFileSelect').value = "";
+    document.getElementById('newUploadTagInput').value = ""; // Clear text box after success
     statusEl.innerText = `(★) Uploaded ${successCount} file(s) & saved to tag: ${tagInput}`;
     
     currentStashFilter = tagInput; 
@@ -328,14 +334,15 @@ function renderStash() {
     updateCounters();
     const previewContainer = document.getElementById('stashPreview');
     const filterDropdown = document.getElementById('stashFilter');
-    const datalist = document.getElementById('savedTagsList');
+    const uploadTagSelect = document.getElementById('uploadTagSelect');
     
     if (!appData.savedTags) appData.savedTags = [];
-    datalist.innerHTML = appData.savedTags.map(t => `<option value="${t}">`).join('');
 
+    // Collect all unique tags
     const allTags = new Set([...appData.savedTags]);
     appData.stash.forEach(item => allTags.add(getImageInfo(item).tag));
     
+    // 1. Fill the Filter Dropdown
     let filterOptions = `<option value="All">View All Tags (${appData.stash.length})</option>`;
     allTags.forEach(tag => {
         const count = appData.stash.filter(i => getImageInfo(i).tag === tag).length;
@@ -344,6 +351,14 @@ function renderStash() {
     });
     filterDropdown.innerHTML = filterOptions;
 
+    // 2. Fill the Upload Tag Selector Dropdown
+    let uploadOptions = `<option value="">-- Choose Existing Tag --</option>`;
+    allTags.forEach(tag => {
+        uploadOptions += `<option value="${tag}">${tag}</option>`;
+    });
+    uploadTagSelect.innerHTML = uploadOptions;
+
+    // Render Images
     let html = '';
     appData.stash.forEach((item, originalIndex) => {
         const info = getImageInfo(item);
@@ -461,7 +476,6 @@ async function prepForPost(id) {
     alert("Caption copied & files downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
 }
 
-// Updated to visually track sequential deletion so you know it's not cached/stuck
 async function markAsPosted(id) {
     const data = appData.slots[id];
     if (!data || !data.images) return clearSlot(id);
