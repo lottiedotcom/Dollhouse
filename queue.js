@@ -212,25 +212,26 @@ function formatTime(time24h) {
     return `${hours}:${minutes} ${ampm}`;
 }
 
+// Reverted to sequential, 1-by-1 uploading with accurate progress text
 async function uploadDirectToSlot(event, id) {
     const files = Array.from(event.target.files);
+    if (files.length === 0) return;
     if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
     
-    document.getElementById('cloudStatus').innerText = "UPLOADING BATCH DIRECT...";
+    const statusEl = document.getElementById('cloudStatus');
     
-    const uploadPromises = files.map(async (file) => {
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        statusEl.innerText = `UPLOADING ${i + 1} OF ${files.length}...`;
         try {
             const fileName = await uploadFileToVault(file);
-            return { vaultKey: fileName, originalName: file.name, tag: 'Direct' };
+            appData.slots[id].images.push({ vaultKey: fileName, originalName: file.name, tag: 'Direct' });
         } catch(e) {
             alert(`Failed to upload ${file.name}: ${e.message}`);
-            return null;
         }
-    });
+    }
 
-    const results = await Promise.all(uploadPromises);
-    results.forEach(res => { if (res) appData.slots[id].images.push(res); });
-
+    statusEl.innerText = "(★) UPLOAD COMPLETE";
     hydrateSlotUI(id);
     saveQueueToCloud();
     event.target.value = ""; 
@@ -287,6 +288,7 @@ function previewSelectedFiles(event) {
     document.getElementById('uploadStatusText').innerText = `${pendingFilesToUpload.length} file(s) selected (${totalMB.toFixed(1)}MB total) ready to upload.`;
 }
 
+// Reverted to sequential, 1-by-1 uploading for the Stash as well
 async function uploadAndSaveTag() {
     if (pendingFilesToUpload.length === 0) return alert("Please click '+ Select Photos / GIFs' first!");
     
@@ -297,23 +299,21 @@ async function uploadAndSaveTag() {
     if (!appData.savedTags.includes(tagInput)) appData.savedTags.push(tagInput);
 
     const statusEl = document.getElementById('uploadStatusText');
-    statusEl.innerText = `Uploading ${pendingFilesToUpload.length} file(s) simultaneously...`;
+    let successCount = 0;
 
-    const uploadPromises = pendingFilesToUpload.map(async (file) => {
+    for (let i = 0; i < pendingFilesToUpload.length; i++) {
+        const file = pendingFilesToUpload[i];
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+        statusEl.innerText = `Uploading ${i + 1} of ${pendingFilesToUpload.length}: ${file.name} (${sizeMB}MB)...`;
+        
         try {
             const fileName = await uploadFileToVault(file);
-            return { vaultKey: fileName, originalName: file.name, tag: tagInput };
+            appData.stash.push({ vaultKey: fileName, originalName: file.name, tag: tagInput });
+            successCount++;
         } catch (err) {
             alert(`Failed to upload ${file.name}:\n\n${err.message}`);
-            return null;
         }
-    });
-
-    const results = await Promise.all(uploadPromises);
-    let successCount = 0;
-    results.forEach(res => {
-        if (res) { appData.stash.push(res); successCount++; }
-    });
+    }
 
     pendingFilesToUpload = [];
     document.getElementById('stashFileSelect').value = "";
@@ -461,15 +461,21 @@ async function prepForPost(id) {
     alert("Caption copied & files downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
 }
 
+// Updated to visually track sequential deletion so you know it's not cached/stuck
 async function markAsPosted(id) {
     const data = appData.slots[id];
     if (!data || !data.images) return clearSlot(id);
 
     if(!confirm("Mark posted? This will permanently delete these files from your Supabase Vault database to save space.")) return;
 
-    document.getElementById('cloudStatus').innerText = "DELETING FROM DB...";
-    for (let item of data.images) {
+    const statusEl = document.getElementById('cloudStatus');
+
+    for (let i = 0; i < data.images.length; i++) {
+        const item = data.images[i];
         const info = getImageInfo(item);
+        
+        statusEl.innerText = `DELETING ITEM ${i + 1} OF ${data.images.length} FROM VAULT...`;
+        
         try {
             await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
                 method: 'DELETE',
@@ -480,10 +486,11 @@ async function markAsPosted(id) {
         }
     }
 
+    statusEl.innerText = "(★) FILES PERMANENTLY DELETED";
     appData.slots[id] = { caption: "", images: [] };
     hydrateSlotUI(id);
     saveQueueToCloud();
-    alert("Deleted from database & cleared slot (★^O^★)");
+    setTimeout(() => alert("Deleted entirely from Vault & cleared slot (★^O^★)"), 100);
 }
 
 function openSettings() {
