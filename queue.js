@@ -11,6 +11,8 @@ let appData = {
     slots: {}
 };
 
+// NEW: Separate Captions Database Memory
+let captionsData = {};
 let loadedImages = {};
 
 function getImageInfo(item) {
@@ -32,8 +34,9 @@ function getImageInfo(item) {
 }
 
 async function initQueue() {
-    document.getElementById('cloudStatus').innerText = "SYNCING QUEUE...";
+    document.getElementById('cloudStatus').innerText = "SYNCING DATABASES...";
     try {
+        // Fetch 1: Photo Queue State
         const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/state.json?t=${Date.now()}`, {
             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
             cache: 'no-store'
@@ -43,17 +46,45 @@ async function initQueue() {
             const json = await response.json();
             appData = { ...appData, ...json };
             if (!appData.savedTags) appData.savedTags = [];
-            
-            let migrated = false;
-            Object.keys(appData.slots).forEach(key => {
-                if(!key.startsWith('d1-') && !key.startsWith('d2-') && !key.startsWith('d3-')) {
-                    appData.slots[`d1-${key}`] = appData.slots[key];
-                    delete appData.slots[key];
-                    migrated = true;
-                }
-            });
-            if(migrated) saveQueueToCloud();
         }
+
+        // Fetch 2: Captions Database
+        try {
+            const capResponse = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/captions.json?t=${Date.now()}`, {
+                headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
+                cache: 'no-store'
+            });
+            if (capResponse.ok) {
+                captionsData = await capResponse.json();
+            }
+        } catch(e) {
+            console.log("No captions database found yet, creating a new one.");
+        }
+            
+        let migratedSlots = false;
+        let migratedCaptions = false;
+
+        // Clean up legacy keys & migrate old captions to the new Database
+        Object.keys(appData.slots).forEach(key => {
+            if(!key.startsWith('d1-') && !key.startsWith('d2-') && !key.startsWith('d3-')) {
+                appData.slots[`d1-${key}`] = appData.slots[key];
+                delete appData.slots[key];
+                migratedSlots = true;
+            }
+        });
+
+        // Loop through everything to ensure captions are moved to the new file
+        Object.keys(appData.slots).forEach(key => {
+            if (appData.slots[key].caption) {
+                captionsData[key] = appData.slots[key].caption;
+                delete appData.slots[key].caption;
+                migratedCaptions = true;
+                migratedSlots = true; 
+            }
+        });
+
+        if(migratedSlots) saveQueueToCloud();
+        if(migratedCaptions) saveCaptionsToCloud();
 
         document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
         
@@ -65,7 +96,6 @@ async function initQueue() {
 }
 
 function saveQueueToCloud() {
-    document.getElementById('cloudStatus').innerText = "SAVING QUEUE...";
     updateCounters();
     clearTimeout(queueSyncTimeout);
     queueSyncTimeout = setTimeout(async () => {
@@ -76,31 +106,54 @@ function saveQueueToCloud() {
                 headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
                 body: blob
             });
-            document.getElementById('cloudStatus').innerText = "(★) QUEUE SAVED";
         } catch (err) {
-            document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
+            console.error("Queue Save Failed", err);
         }
     }, 1000);
 }
 
-// NEW: Manual Save Drafts function
+function saveCaptionsToCloud() {
+    const blob = new Blob([JSON.stringify(captionsData)], { type: 'application/json' });
+    fetch(`${dbConfig.url}/storage/v1/object/vault/captions.json`, {
+        method: 'POST',
+        headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
+        body: blob
+    });
+}
+
 function forceSaveDrafts() {
+    // Force active keyboard to close
     if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
         document.activeElement.blur(); 
     }
     
+    // Scrape all text boxes to ensure no typed data is missed
+    Object.keys(appData.slots).forEach(id => {
+        const el = document.getElementById(`caption-${id}`);
+        if (el) captionsData[id] = el.value;
+    });
+
     document.getElementById('cloudStatus').innerText = "SAVING DRAFTS...";
-    clearTimeout(queueSyncTimeout); // Cancel any pending auto-saves
+    clearTimeout(queueSyncTimeout); 
     
-    const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+    // 1. Save state.json
+    const blob1 = new Blob([JSON.stringify(appData)], { type: 'application/json' });
     fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
         method: 'POST',
         headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
-        body: blob
+        body: blob1
+    });
+
+    // 2. Save captions.json
+    const blob2 = new Blob([JSON.stringify(captionsData)], { type: 'application/json' });
+    fetch(`${dbConfig.url}/storage/v1/object/vault/captions.json`, {
+        method: 'POST',
+        headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
+        body: blob2
     }).then(res => {
         if(res.ok) {
             document.getElementById('cloudStatus').innerText = "(★) DRAFTS SAVED TO VAULT";
-            alert("All photos and captions for all 3 days are securely saved to your Vault drafts!");
+            alert("All photos and captions for all 3 days are securely saved to your Vault databases!");
         } else {
             document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
             alert("Failed to save. Check connection.");
@@ -109,6 +162,37 @@ function forceSaveDrafts() {
         document.getElementById('cloudStatus').innerText = "SAVE ERROR.";
     });
 }
+
+// MANUAL CAPTION SAVE BUTTON
+function saveCaptionManually(event, id) {
+    const text = document.getElementById(`caption-${id}`).value;
+    captionsData[id] = text;
+    
+    const btn = event.target;
+    const oldText = btn.innerText;
+    btn.innerText = "Saving...";
+    document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
+    
+    const blob = new Blob([JSON.stringify(captionsData)], { type: 'application/json' });
+    fetch(`${dbConfig.url}/storage/v1/object/vault/captions.json`, {
+        method: 'POST',
+        headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
+        body: blob
+    }).then(res => {
+        if(res.ok) {
+            document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
+            btn.innerText = "✓ Saved!";
+            setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
+        } else {
+            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
+            btn.innerText = "❌ Error";
+            setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
+        }
+    });
+    
+    hydrateSlotUI(id);
+}
+
 
 // RAW ARRAY BUFFER UPLOAD
 async function uploadFileToVault(file) {
@@ -174,12 +258,21 @@ function updateCounters() {
     const stashCount = appData.stash.length;
     const totalSlots = appData.schedule.length * 3;
     let filledSlots = 0;
-    Object.values(appData.slots).forEach(slot => {
-        if ((slot.images && slot.images.length > 0) || slot.caption) filledSlots++;
-    });
+    
+    if(appData.slots) {
+        Object.keys(appData.slots).forEach(id => {
+            const slot = appData.slots[id];
+            const hasImages = slot.images && slot.images.length > 0;
+            const hasCaption = captionsData[id] && captionsData[id].trim() !== "";
+            if (hasImages || hasCaption) filledSlots++;
+        });
+    }
 
-    document.getElementById('headerCounters').innerHTML = `Stashed: <b>${stashCount}</b> &nbsp;|&nbsp; Slots Filled: <b>${filledSlots}</b> / ${totalSlots}`;
-    document.getElementById('stashWarning').style.display = stashCount >= 15 ? 'block' : 'none';
+    const header = document.getElementById('headerCounters');
+    if(header) header.innerHTML = `Stashed: <b>${stashCount}</b> &nbsp;|&nbsp; Slots Filled: <b>${filledSlots}</b> / ${totalSlots}`;
+    
+    const stashWarning = document.getElementById('stashWarning');
+    if(stashWarning) stashWarning.style.display = stashCount >= 15 ? 'block' : 'none';
 }
 
 function renderApp() {
@@ -197,14 +290,16 @@ function renderApp() {
     updateCounters();
 }
 
-// Fixed Textarea: Switched from "oninput" to "onblur" so it only saves when you stop typing
 function createSlotHTML(id, title) {
     return `
         <div class="slot" id="slot-${id}">
             <div class="slot-title">${title}</div>
             <input type="file" multiple accept="image/*,image/gif" onchange="uploadDirectToSlot(event, '${id}')">
             <div class="slot-gallery" id="gallery-${id}" style="display: none;"></div>
-            <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here..." onblur="updateCaption('${id}', this.value)"></textarea>
+            
+            <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here..."></textarea>
+            <button class="action-btn" style="background: var(--baby-blue); border-color: var(--dark-blue); margin-bottom: 10px; margin-top: 0;" onclick="saveCaptionManually(event, '${id}')">💾 Save Caption</button>
+            
             <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
                 <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
                 <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Delete from DB)</button>
@@ -218,7 +313,7 @@ function hydrateSlotUI(id) {
     if(!appData.slots[id]) return;
     const data = appData.slots[id];
     
-    document.getElementById(`caption-${id}`).value = data.caption || "";
+    document.getElementById(`caption-${id}`).value = captionsData[id] || "";
     
     const gallery = document.getElementById(`gallery-${id}`);
     const btnGroup = document.getElementById(`btnGroup-${id}`);
@@ -231,7 +326,7 @@ function hydrateSlotUI(id) {
         }).join('');
         gallery.style.display = 'flex';
         btnGroup.style.display = 'flex';
-    } else if (data.caption) {
+    } else if (captionsData[id] && captionsData[id].trim() !== "") {
         gallery.style.display = 'none';
         btnGroup.style.display = 'flex';
     } else {
@@ -281,20 +376,17 @@ async function uploadDirectToSlot(event, id) {
     setTimeout(() => { pContainer.style.display = 'none'; }, 1000);
 }
 
-function updateCaption(id, text) {
-    if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
-    appData.slots[id].caption = text;
-    saveQueueToCloud();
-}
-
 function clearSlot(id) {
     if (appData.slots[id] && appData.slots[id].images && appData.slots[id].images.length > 0) {
         appData.slots[id].images.forEach(imgObj => appData.stash.push(imgObj));
     }
-    appData.slots[id] = { caption: "", images: [] };
+    appData.slots[id] = { caption: "", images: [] }; 
+    delete captionsData[id];
+    
     hydrateSlotUI(id);
     renderStash();
     saveQueueToCloud();
+    saveCaptionsToCloud();
 }
 
 function removeSingleImageFromSlot(id, index) {
@@ -313,10 +405,12 @@ function clearAllSlots() {
             if (appData.slots[id] && appData.slots[id].images) {
                 appData.slots[id].images.forEach(imgObj => appData.stash.push(imgObj));
             }
+            delete captionsData[id];
         });
         appData.slots = {};
         renderApp();
         saveQueueToCloud();
+        saveCaptionsToCloud();
     }
 }
 
@@ -541,8 +635,12 @@ async function prepForPost(id) {
     const data = appData.slots[id];
     if (!data) return;
 
-    if (data.caption) {
-        try { await navigator.clipboard.writeText(data.caption); } catch (err) {}
+    // Pull directly from the DOM just in case you haven't clicked save yet
+    const el = document.getElementById(`caption-${id}`);
+    const captionText = el ? el.value : captionsData[id];
+
+    if (captionText) {
+        try { await navigator.clipboard.writeText(captionText); } catch (err) {}
     }
 
     if (data.images && data.images.length > 0) {
@@ -606,8 +704,11 @@ async function markAsPosted(id) {
 
     statusEl.innerText = "(★) FILES PERMANENTLY DELETED";
     appData.slots[id] = { caption: "", images: [] };
+    delete captionsData[id];
+    
     hydrateSlotUI(id);
     saveQueueToCloud();
+    saveCaptionsToCloud();
     setTimeout(() => alert("Deleted entirely from Vault & cleared slot (★^O^★)"), 100);
 }
 
