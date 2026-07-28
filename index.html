@@ -160,6 +160,7 @@
         .gallery-item img {
             width: 100px; height: 100px; object-fit: cover;
             border: 2px solid var(--baby-blue); border-radius: 5px; flex-shrink: 0;
+            cursor: pointer;
         }
 
         input[type="file"] {
@@ -427,6 +428,8 @@
         async function uploadFileToVault(file) {
             const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
             const fileName = `${Date.now()}_${cleanName}`;
+            
+            await new Promise(r => setTimeout(r, 50));
 
             const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
                 method: 'POST',
@@ -555,10 +558,10 @@
             const btnGroup = document.getElementById(`btnGroup-${id}`);
             
             if (data.images && data.images.length > 0) {
-                gallery.innerHTML = data.images.map(item => {
+                gallery.innerHTML = data.images.map((item, imgIndex) => {
                     const info = getImageInfo(item);
                     const url = loadedImages[info.vaultKey] || '';
-                    return `<div class="gallery-item"><img src="${url}"></div>`;
+                    return `<div class="gallery-item"><img src="${url}" onclick="removeSingleImageFromSlot('${id}', ${imgIndex})" title="Click to return to Stash"></div>`;
                 }).join('');
                 gallery.style.display = 'flex';
                 btnGroup.style.display = 'flex';
@@ -612,7 +615,7 @@
             hydrateSlotUI(id);
         }
 
-        // --- CLEAR SLOT (RETURNS PHOTOS BACK TO STASH) ---
+        // --- CLEAR SLOT & REMOVE SINGLE IMAGE ---
         function clearSlot(id) {
             if (appData.slots[id] && appData.slots[id].images && appData.slots[id].images.length > 0) {
                 appData.slots[id].images.forEach(imgObj => {
@@ -623,6 +626,17 @@
             hydrateSlotUI(id);
             renderStash();
             saveToCloud();
+        }
+
+        function removeSingleImageFromSlot(id, index) {
+            if (appData.slots[id] && appData.slots[id].images && appData.slots[id].images.length > index) {
+                const removedItem = appData.slots[id].images.splice(index, 1)[0];
+                appData.stash.push(removedItem);
+                
+                hydrateSlotUI(id);
+                renderStash();
+                saveToCloud();
+            }
         }
 
         function clearAllSlots() {
