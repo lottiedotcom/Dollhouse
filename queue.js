@@ -11,7 +11,6 @@ let appData = {
     slots: {}
 };
 
-// NEW: Separate Captions Database Memory
 let captionsData = {};
 let loadedImages = {};
 
@@ -36,7 +35,6 @@ function getImageInfo(item) {
 async function initQueue() {
     document.getElementById('cloudStatus').innerText = "SYNCING DATABASES...";
     try {
-        // Fetch 1: Photo Queue State
         const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/state.json?t=${Date.now()}`, {
             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
             cache: 'no-store'
@@ -48,7 +46,6 @@ async function initQueue() {
             if (!appData.savedTags) appData.savedTags = [];
         }
 
-        // Fetch 2: Captions Database
         try {
             const capResponse = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/captions.json?t=${Date.now()}`, {
                 headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
@@ -64,7 +61,6 @@ async function initQueue() {
         let migratedSlots = false;
         let migratedCaptions = false;
 
-        // Clean up legacy keys & migrate old captions to the new Database
         Object.keys(appData.slots).forEach(key => {
             if(!key.startsWith('d1-') && !key.startsWith('d2-') && !key.startsWith('d3-')) {
                 appData.slots[`d1-${key}`] = appData.slots[key];
@@ -73,7 +69,6 @@ async function initQueue() {
             }
         });
 
-        // Loop through everything to ensure captions are moved to the new file
         Object.keys(appData.slots).forEach(key => {
             if (appData.slots[key].caption) {
                 captionsData[key] = appData.slots[key].caption;
@@ -122,21 +117,21 @@ function saveCaptionsToCloud() {
 }
 
 function forceSaveDrafts() {
-    // Force active keyboard to close
     if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
         document.activeElement.blur(); 
     }
     
-    // Scrape all text boxes to ensure no typed data is missed
-    Object.keys(appData.slots).forEach(id => {
-        const el = document.getElementById(`caption-${id}`);
-        if (el) captionsData[id] = el.value;
+    document.querySelectorAll('.caption-box').forEach(el => {
+        const id = el.id.replace('caption-', '');
+        captionsData[id] = el.value;
+        if(el.value.trim() !== "" && !appData.slots[id]) {
+            appData.slots[id] = { images: [] };
+        }
     });
 
     document.getElementById('cloudStatus').innerText = "SAVING DRAFTS...";
     clearTimeout(queueSyncTimeout); 
     
-    // 1. Save state.json
     const blob1 = new Blob([JSON.stringify(appData)], { type: 'application/json' });
     fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
         method: 'POST',
@@ -144,7 +139,6 @@ function forceSaveDrafts() {
         body: blob1
     });
 
-    // 2. Save captions.json
     const blob2 = new Blob([JSON.stringify(captionsData)], { type: 'application/json' });
     fetch(`${dbConfig.url}/storage/v1/object/vault/captions.json`, {
         method: 'POST',
@@ -161,18 +155,34 @@ function forceSaveDrafts() {
     }).catch(err => {
         document.getElementById('cloudStatus').innerText = "SAVE ERROR.";
     });
+    
+    updateCounters();
 }
 
-// MANUAL CAPTION SAVE BUTTON
-function saveCaptionManually(event, id) {
-    const text = document.getElementById(`caption-${id}`).value;
+// Stores text in short-term memory instantly so it's never erased on screen reload
+function updateCaptionText(id, text) {
     captionsData[id] = text;
+    if(text.trim() !== "" && !appData.slots[id]) {
+        appData.slots[id] = { images: [] };
+    }
+    updateCounters();
+}
+
+function saveCaptionManually(event, id) {
+    const el = document.getElementById(`caption-${id}`);
+    if(el) {
+        captionsData[id] = el.value;
+        if(el.value.trim() !== "" && !appData.slots[id]) {
+            appData.slots[id] = { images: [] };
+        }
+    }
     
     const btn = event.target;
-    const oldText = btn.innerText;
     btn.innerText = "Saving...";
     document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
     
+    saveQueueToCloud(); // Ensures slot structure is saved too
+
     const blob = new Blob([JSON.stringify(captionsData)], { type: 'application/json' });
     fetch(`${dbConfig.url}/storage/v1/object/vault/captions.json`, {
         method: 'POST',
@@ -193,8 +203,6 @@ function saveCaptionManually(event, id) {
     hydrateSlotUI(id);
 }
 
-
-// RAW ARRAY BUFFER UPLOAD
 async function uploadFileToVault(file) {
     const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
     const fileName = `${Date.now()}_${cleanName}`;
@@ -247,6 +255,15 @@ async function preloadAllImages() {
 }
 
 function changeDay(delta) {
+    // Scrape text just in case before flipping day
+    document.querySelectorAll('.caption-box').forEach(el => {
+        const id = el.id.replace('caption-', '');
+        captionsData[id] = el.value;
+        if(el.value.trim() !== "" && !appData.slots[id]) {
+            appData.slots[id] = { images: [] };
+        }
+    });
+
     currentDay += delta;
     if(currentDay < 1) currentDay = 1;
     if(currentDay > 3) currentDay = 3;
@@ -297,7 +314,7 @@ function createSlotHTML(id, title) {
             <input type="file" multiple accept="image/*,image/gif" onchange="uploadDirectToSlot(event, '${id}')">
             <div class="slot-gallery" id="gallery-${id}" style="display: none;"></div>
             
-            <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here..."></textarea>
+            <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here..." oninput="updateCaptionText('${id}', this.value)"></textarea>
             <button class="action-btn" style="background: var(--baby-blue); border-color: var(--dark-blue); margin-bottom: 10px; margin-top: 0;" onclick="saveCaptionManually(event, '${id}')">💾 Save Caption</button>
             
             <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
@@ -310,10 +327,11 @@ function createSlotHTML(id, title) {
 }
 
 function hydrateSlotUI(id) {
-    if(!appData.slots[id]) return;
-    const data = appData.slots[id];
+    // BUG FIX: Provide default {images: []} if empty so it doesn't return early and skip your text!
+    const data = appData.slots[id] || { images: [] };
     
-    document.getElementById(`caption-${id}`).value = captionsData[id] || "";
+    const captionEl = document.getElementById(`caption-${id}`);
+    if(captionEl) captionEl.value = captionsData[id] || "";
     
     const gallery = document.getElementById(`gallery-${id}`);
     const btnGroup = document.getElementById(`btnGroup-${id}`);
@@ -380,7 +398,7 @@ function clearSlot(id) {
     if (appData.slots[id] && appData.slots[id].images && appData.slots[id].images.length > 0) {
         appData.slots[id].images.forEach(imgObj => appData.stash.push(imgObj));
     }
-    appData.slots[id] = { caption: "", images: [] }; 
+    appData.slots[id] = { images: [] }; 
     delete captionsData[id];
     
     hydrateSlotUI(id);
@@ -552,7 +570,7 @@ function executeStashMove(slotIndex) {
     const item = appData.stash.splice(currentStashActionIndex, 1)[0];
     const slotId = `d${currentDay}-sched-${slotIndex}`;
     
-    if (!appData.slots[slotId]) appData.slots[slotId] = { caption: "", images: [] };
+    if (!appData.slots[slotId]) appData.slots[slotId] = { images: [] };
     appData.slots[slotId].images.push(item);
     
     renderApp();
@@ -622,7 +640,7 @@ function autoFillDayCustom() {
         const randomSlotNode = emptySlots[Math.floor(Math.random() * emptySlots.length)];
         const id = randomSlotNode.id.replace('slot-', '');
         
-        if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
+        if (!appData.slots[id]) appData.slots[id] = { images: [] };
         appData.slots[id].images.push(item);
     }
 
@@ -635,7 +653,6 @@ async function prepForPost(id) {
     const data = appData.slots[id];
     if (!data) return;
 
-    // Pull directly from the DOM just in case you haven't clicked save yet
     const el = document.getElementById(`caption-${id}`);
     const captionText = el ? el.value : captionsData[id];
 
@@ -703,7 +720,7 @@ async function markAsPosted(id) {
     }
 
     statusEl.innerText = "(★) FILES PERMANENTLY DELETED";
-    appData.slots[id] = { caption: "", images: [] };
+    appData.slots[id] = { images: [] };
     delete captionsData[id];
     
     hydrateSlotUI(id);
@@ -746,4 +763,3 @@ function saveAndCloseSettings() {
     renderApp();
     saveQueueToCloud();
 }
-
