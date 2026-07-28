@@ -231,7 +231,7 @@
                 <button class="btn-style" style="width: 100%; margin-top: 15px;" onclick="addRandomSlot()">+ Add Random Slot</button>
             </div>
         </div>
-        
+
         <!-- Clear All Button -->
         <div style="text-align: center; margin-top: 30px;">
             <button class="btn-style clear" style="width: 100%; max-width: 400px; padding: 15px; background: #fff; border: 3px outset #ccc; color: #cc0000; font-weight: bold;" onclick="clearAllSlots()">( ✖ _ ✖ ) Clear All Slots</button>
@@ -423,9 +423,9 @@
                     <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
                     
                     <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
-                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Prep for OF (Download & Copy Caption)</button>
+                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
                         <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Auto-Archive)</button>
-                        <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot & Delete Vault Photos</button>
+                        <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot</button>
                     </div>
                 </div>
             `;
@@ -487,32 +487,9 @@
         }
 
         async function clearSlot(id) {
-            const data = appData.slots[id];
-            
-            // Delete raw images from Supabase Vault bucket if present
-            if (data && data.images && data.images.length > 0) {
-                document.getElementById('cloudStatus').innerText = "DELETING FROM VAULT...";
-                const keysToDelete = data.images.map(item => getImageInfo(item).vaultKey);
-                
-                try {
-                    await fetch(`${dbConfig.url}/storage/v1/object/vault`, {
-                        method: 'DELETE',
-                        headers: {
-                            'apikey': dbConfig.key,
-                            'Authorization': `Bearer ${dbConfig.key}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ prefixes: keysToDelete })
-                    });
-                } catch (err) {
-                    console.error("Failed to delete files from cloud:", err);
-                }
-            }
-
             appData.slots[id] = { caption: "", images: [] };
             hydrateSlotUI(id);
             await saveToCloudImmediate();
-            document.getElementById('cloudStatus').innerText = "(★) SLOT CLEARED & DELETED";
         }
 
         async function clearAllSlots() {
@@ -585,23 +562,21 @@
             await saveToCloudImmediate();
         }
 
-        // --- PREP POST (DOWNLOAD & COPY) ---
+        // --- PREP POST & CLEAN ORIGINAL DOWNLOAD ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
 
-            document.getElementById('cloudStatus').innerText = "PREPPING POST...";
-
-            // 1. Copy caption to clipboard
+            // 1. Copy caption
             if (data.caption) {
                 try {
                     await navigator.clipboard.writeText(data.caption);
                 } catch (err) {
-                    console.error("Caption copy failed", err);
+                    console.error("Caption copy failed");
                 }
             }
 
-            // 2. Auto-download high-res images directly to phone downloads
+            // 2. Download via Data URL (The method confirmed working on your device)
             if (data.images && data.images.length > 0) {
                 for (let item of data.images) {
                     try {
@@ -613,31 +588,29 @@
                         
                         if (response.ok) {
                             const blob = await response.blob();
-                            const url = window.URL.createObjectURL(blob);
                             
-                            const a = document.createElement('a');
-                            a.style.display = 'none';
-                            a.href = url;
-                            a.download = info.originalName || 'OF_Post_Image.jpg';
-                            document.body.appendChild(a);
-                            a.click();
-                            
-                            window.URL.revokeObjectURL(url);
-                            document.body.removeChild(a);
-                            
-                            // Pause between files so mobile browser doesn't block multiple downloads
-                            await new Promise(resolve => setTimeout(resolve, 800));
+                            const reader = new FileReader();
+                            await new Promise((resolve) => {
+                                reader.onloadend = () => {
+                                    const a = document.createElement('a');
+                                    a.href = reader.result;
+                                    // Downloads directly to your phone using whatever original name it came with
+                                    a.download = info.originalName;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    resolve();
+                                };
+                                reader.readAsDataURL(blob);
+                            });
                         }
                     } catch (e) {
                         console.error("Download failed for:", item, e);
                     }
                 }
-                document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
-                alert("Caption copied! Photos downloaded to Recents. Ready for OnlyFans! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
-            } else if (data.caption) {
-                document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
-                alert("Caption copied to your keyboard! (No photos in this slot)");
             }
+
+            alert("Caption copied & photos downloaded directly to your phone (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
@@ -668,7 +641,7 @@
             }
 
             await clearSlot(id);
-            alert("Moved to posted folder & cleared (★^O^★)");
+            alert("moved to posted folder & cleared (★^O^★)");
         }
 
         // --- SETTINGS MODAL LOGIC ---
@@ -718,4 +691,3 @@
     </script>
 </body>
 </html>
-
