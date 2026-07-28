@@ -325,8 +325,7 @@
         // --- RAW FILE HANDLING ---
         async function uploadFileToVault(file) {
             document.getElementById('cloudStatus').innerText = "UPLOADING HIGH-RES FILE...";
-            const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-            const fileName = `${Date.now()}___${cleanName}`;
+            const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
             
             await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
                 method: 'POST',
@@ -364,13 +363,6 @@
                     }
                 }
             }
-        }
-
-        function getOriginalName(fileName) {
-            if (fileName.includes('___')) {
-                return fileName.split('___').slice(1).join('___');
-            }
-            return fileName.replace(/^\d+_/, '');
         }
 
         // --- CORE UI RENDER ---
@@ -530,7 +522,7 @@
             saveToCloud();
         }
 
-        // --- PREP POST & EXACT NAME DATA-URL DOWNLOAD ---
+        // --- PREP POST & ORIGINAL NAME DOWNLOAD ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
@@ -544,40 +536,26 @@
                 }
             }
 
-            // 2. Download via Data URL so Android Chrome strictly preserves original filename
+            // 2. Download with exact original file name so Gallery duplicate finder matches them
             if (data.images && data.images.length > 0) {
-                for (let fileName of data.images) {
-                    try {
-                        const originalName = getOriginalName(fileName);
+                data.images.forEach((fileName) => {
+                    const url = loadedImages[fileName];
+                    if (url) {
+                        const a = document.createElement('a');
+                        a.href = url;
                         
-                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
-                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
-                        });
+                        // Strip leading timestamp prefix to restore original name
+                        const originalName = fileName.replace(/^\d+_/, '');
+                        a.download = originalName;
                         
-                        if (response.ok) {
-                            const blob = await response.blob();
-                            
-                            const reader = new FileReader();
-                            await new Promise((resolve) => {
-                                reader.onloadend = () => {
-                                    const a = document.createElement('a');
-                                    a.href = reader.result;
-                                    a.download = originalName;
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    resolve();
-                                };
-                                reader.readAsDataURL(blob);
-                            });
-                        }
-                    } catch (e) {
-                        console.error("Download failed for:", fileName, e);
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
                     }
-                }
+                });
             }
 
-            alert("caption copied & photos downloaded with exact original names (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+            alert("caption copied & photos downloaded with original names (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
