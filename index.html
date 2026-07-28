@@ -562,7 +562,7 @@
             await saveToCloudImmediate();
         }
 
-        // --- PREP POST & DOWNLOAD TO DEVICE ---
+        // --- PREP POST & CLEAN ORIGINAL DOWNLOAD ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
@@ -576,7 +576,7 @@
                 }
             }
 
-            // 2. Download via safe Blob URL that stays alive for Android Download Manager
+            // 2. Download via Data URL (The method confirmed working on your device)
             if (data.images && data.images.length > 0) {
                 for (let item of data.images) {
                     try {
@@ -588,21 +588,21 @@
                         
                         if (response.ok) {
                             const blob = await response.blob();
-                            const url = window.URL.createObjectURL(blob);
                             
-                            const a = document.createElement('a');
-                            a.style.display = 'none';
-                            a.href = url;
-                            a.download = info.originalName;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            
-                            // Leave the link alive for 60 seconds so Android doesn't throw an "Access Denied" error
-                            setTimeout(() => window.URL.revokeObjectURL(url), 60000); 
-                            
-                            // Pause slightly between files so Chrome doesn't block them
-                            await new Promise(resolve => setTimeout(resolve, 800));
+                            const reader = new FileReader();
+                            await new Promise((resolve) => {
+                                reader.onloadend = () => {
+                                    const a = document.createElement('a');
+                                    a.href = reader.result;
+                                    // Downloads directly to your phone using whatever original name it came with
+                                    a.download = info.originalName;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    resolve();
+                                };
+                                reader.readAsDataURL(blob);
+                            });
                         }
                     } catch (e) {
                         console.error("Download failed for:", item, e);
@@ -610,7 +610,7 @@
                 }
             }
 
-            alert("Caption copied & photos sent to downloads! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+            alert("Caption copied & photos downloaded directly to your phone (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
