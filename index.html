@@ -231,6 +231,11 @@
                 <button class="btn-style" style="width: 100%; margin-top: 15px;" onclick="addRandomSlot()">+ Add Random Slot</button>
             </div>
         </div>
+
+        <!-- Clear All Button -->
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="btn-style clear" style="width: 100%; max-width: 400px; padding: 15px; background: #fff; border: 3px outset #ccc; color: #cc0000; font-weight: bold;" onclick="clearAllSlots()">( ✖ _ ✖ ) Clear All Slots</button>
+        </div>
     </div>
 
     <script>
@@ -251,6 +256,25 @@
         };
 
         let loadedImages = {};
+
+        // Helper to normalize image records
+        function getImageInfo(item) {
+            if (!item) return { vaultKey: '', originalName: '' };
+            if (typeof item === 'object' && item.vaultKey) {
+                let name = item.originalName || item.vaultKey;
+                name = name.replace(/^QUEUE_DUMP_[^_]*_?/, '');
+                return { vaultKey: item.vaultKey, originalName: name };
+            }
+            let vaultKey = item;
+            let originalName = item;
+            if (item.includes('___')) {
+                originalName = item.split('___').slice(1).join('___');
+            } else {
+                originalName = item.replace(/^\d+_/, '');
+            }
+            originalName = originalName.replace(/^QUEUE_DUMP_[^_]*_?/, '');
+            return { vaultKey, originalName };
+        }
 
         // --- SUPABASE CLOUD SYNC ---
         function init() {
@@ -467,6 +491,20 @@
             saveToCloud();
         }
 
+        function clearAllSlots() {
+            if(confirm("Are you sure you want to clear ALL scheduled slots? (This won't delete the actual photos from your Vault).")) {
+                document.getElementById('cloudStatus').innerText = "CLEARING ALL SLOTS...";
+                
+                Object.keys(appData.slots).forEach(id => {
+                    appData.slots[id] = { caption: "", images: [] };
+                });
+                
+                renderApp();
+                saveToCloud();
+                document.getElementById('cloudStatus').innerText = "(★) ALL SLOTS CLEARED";
+            }
+        }
+
         // --- STASH & AUTO-FILL ---
         async function uploadToStash(event) {
             const files = Array.from(event.target.files);
@@ -522,7 +560,7 @@
             saveToCloud();
         }
 
-        // --- PREP POST & ORIGINAL NAME DOWNLOAD ---
+        // --- PREP POST & ORIGINAL NAME DOWNLOAD (STRICTLY ONE BY ONE) ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
@@ -536,26 +574,50 @@
                 }
             }
 
-            // 2. Download with exact original file name so Gallery duplicate finder matches them
+            // 2. Download completely securely, spaced out by 2.5 seconds so Chrome doesn't panic
             if (data.images && data.images.length > 0) {
-                data.images.forEach((fileName) => {
-                    const url = loadedImages[fileName];
-                    if (url) {
-                        const a = document.createElement('a');
-                        a.href = url;
+                for (let i = 0; i < data.images.length; i++) {
+                    let fileName = data.images[i];
+                    try {
+                        // Update status text so you know it's actually working and not frozen
+                        document.getElementById('cloudStatus').innerText = `DOWNLOADING PHOTO ${i + 1} OF ${data.images.length}...`;
                         
-                        // Strip leading timestamp prefix to restore original name
-                        const originalName = fileName.replace(/^\d+_/, '');
-                        a.download = originalName;
+                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
+                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
+                        });
                         
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
+                        if (response.ok) {
+                            const blob = await response.blob();
+                            const originalName = fileName.replace(/^\d+_/, '');
+                            
+                            // Create standard object URL
+                            const url = window.URL.createObjectURL(blob);
+                            
+                            const a = document.createElement('a');
+                            a.style.display = 'none';
+                            a.href = url;
+                            a.download = originalName;
+                            document.body.appendChild(a);
+                            
+                            // Trigger the physical download
+                            a.click();
+                            
+                            document.body.removeChild(a);
+                            
+                            // HARD PAUSE: Wait 2.5 full seconds before the loop moves to the next photo
+                            // This guarantees Android processes the first download completely.
+                            if (i < data.images.length - 1) {
+                                await new Promise(resolve => setTimeout(resolve, 2500));
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Download failed for:", fileName, e);
                     }
-                });
+                }
+                document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             }
 
-            alert("caption copied & photos downloaded with original names (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+            alert("Caption copied & photos downloaded! (Check your notifications/recents) (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
@@ -635,4 +697,3 @@
     </script>
 </body>
 </html>
-
