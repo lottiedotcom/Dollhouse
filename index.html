@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Queue Manager (★^O^★)</title>
+    <title>Manager (★^O^★)</title>
     
     <!-- App Meta Tags -->
     <link rel="manifest" href="manifest.json">
@@ -83,6 +83,20 @@
             border-radius: 5px; font-family: 'Verdana', sans-serif; color: #000;
         }
         .btn-style:active { border-style: inset; }
+        
+        .tab-bar {
+            display: flex; gap: 5px; margin-bottom: 15px;
+            max-width: 900px; margin-left: auto; margin-right: auto;
+        }
+        .tab-btn {
+            flex: 1; padding: 12px; background: #fff; border: 3px outset var(--baby-pink);
+            color: var(--hot-pink); font-weight: bold; cursor: pointer; border-radius: 10px;
+            font-family: 'Comic Sans MS', sans-serif; opacity: 0.7;
+        }
+        .tab-btn.active {
+            background: var(--baby-pink); opacity: 1; border-style: inset; color: white;
+            text-shadow: 1px 1px var(--hot-pink);
+        }
 
         #cloudStatus {
             text-align: center; font-size: 11px; color: var(--dark-blue);
@@ -186,6 +200,25 @@
 
         .time-row { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px; }
         .remove-btn { background: #ff9999; border: 2px outset #cc0000; color: white; font-weight: bold; cursor: pointer; padding: 6px 10px; border-radius: 5px; }
+
+        /* Kaomoji Dictionary Styles */
+        .kaomoji-form {
+            background: white; border: 3px solid var(--baby-blue); border-radius: 10px;
+            padding: 15px; margin-bottom: 20px; box-shadow: 3px 3px 0px var(--baby-pink);
+            max-width: 900px; margin-left: auto; margin-right: auto;
+        }
+        .kaomoji-card {
+            background: #fdfdfd; border: 2px dashed var(--baby-blue); border-radius: 8px;
+            padding: 15px; margin-bottom: 15px; display: flex; align-items: center;
+            box-shadow: 2px 2px 0px #ffe4e1;
+        }
+        .kaomoji-text-area { flex: 1; text-align: center; }
+        .kaomoji-text { font-size: 24px; color: #333; margin-bottom: 10px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}
+        .kaomoji-tags { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+        .k-tag { background: #f0f8ff; border: 1px solid var(--baby-blue); color: var(--dark-blue); font-size: 10px; padding: 3px 8px; border-radius: 15px; text-transform: lowercase; }
+        .k-actions { display: flex; flex-direction: column; gap: 5px; margin-left: 15px; }
+        .btn-copy-k { background: var(--baby-pink); border: 2px outset var(--hot-pink); padding: 15px 10px; font-weight: bold; border-radius: 5px; cursor: pointer; }
+        .btn-del-k { background: transparent; border: none; color: #cc0000; font-size: 10px; text-decoration: underline; cursor: pointer; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -217,7 +250,7 @@
 
     <div class="header">
         <div class="header-top">
-            <h1>(★) Queue Manager</h1>
+            <h1>(★) Manager</h1>
             <button class="btn-style" onclick="openSettings()">(★) Schedule</button>
         </div>
         <div class="header-stats" id="headerCounters">
@@ -225,11 +258,19 @@
         </div>
     </div>
 
+    <!-- App Navigation Tabs -->
+    <div class="tab-bar">
+        <button id="btn-tab-queue" class="tab-btn active" onclick="switchTab('queue')">Queue Planner</button>
+        <button id="btn-tab-kaomoji" class="tab-btn" onclick="switchTab('kaomoji')">Kaomoji Dict.</button>
+    </div>
+
     <div id="cloudStatus">Checking connection...</div>
 
-    <div id="appInterface" style="display: none;">
+    <!-- ============================================== -->
+    <!-- TAB 1: QUEUE MANAGER                           -->
+    <!-- ============================================== -->
+    <div id="tab-queue" style="display: none;">
         
-        <!-- Content Stash -->
         <div class="stash-drawer">
             <div class="stash-header">
                 <span>(★) Content Stash</span>
@@ -277,7 +318,6 @@
             </div>
         </div>
 
-        <!-- 3-Day Navigation -->
         <div class="day-navigation">
             <button class="btn-style nav-arrow" onclick="changeDay(-1)">&#9664;</button>
             <h2 id="dayDisplay">Day 1</h2>
@@ -285,66 +325,67 @@
         </div>
 
         <div class="grid-container">
-            <!-- Scheduled Column -->
             <div class="section">
                 <h2>(★) Scheduled</h2>
                 <div id="scheduled-container"></div>
             </div>
         </div>
 
-        <!-- Clear All Button -->
         <div style="text-align: center; margin-top: 30px;">
             <button class="btn-style clear" style="width: 100%; max-width: 400px; padding: 15px; background: #fff; border: 3px outset #ccc; color: #cc0000; font-weight: bold;" onclick="clearAllSlots()">( ✖ _ ✖ ) Clear All Slots</button>
         </div>
     </div>
 
+    <!-- ============================================== -->
+    <!-- TAB 2: KAOMOJI DICTIONARY                      -->
+    <!-- ============================================== -->
+    <div id="tab-kaomoji" style="display: none;">
+        
+        <!-- Add New Combo Form -->
+        <div class="kaomoji-form">
+            <h2 style="margin-top: 0;">Add New Combo</h2>
+            <div style="display: flex; gap: 10px; align-items: stretch;">
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 10px;">
+                    <textarea id="newKCombo" class="input-field" style="margin-bottom:0; height: 60px; font-size: 18px; text-align: center;" placeholder="Paste emoji/symbol combo here..."></textarea>
+                    <input type="text" id="newKTags" class="input-field" style="margin-bottom:0;" placeholder="tags, comma, separated (e.g. angel, cute, wings)">
+                </div>
+                <button class="btn-style" style="background: var(--hot-pink); color: white; border-color: var(--baby-pink);" onclick="addNewKaomoji()">Save<br>Combo</button>
+            </div>
+        </div>
+
+        <!-- Search & List -->
+        <div class="section" style="max-width: 900px; margin: 0 auto;">
+            <input type="text" id="searchKTags" class="input-field" placeholder="🔍 Search tags (e.g. angel, star)..." oninput="renderKaomojiList()">
+            
+            <div id="kaomoji-list-container" style="margin-top: 20px;">
+                <!-- Cards dynamically inject here -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Core App Setup Script -->
     <script>
-        // Service Worker Registration
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').then(() => {
                 console.log("Service Worker Registered");
             });
         }
 
+        // Shared Global Credentials
         let dbConfig = { url: '', key: '' };
-        let syncTimeout;
-        let currentDay = 1;
-        let currentStashFilter = 'All';
-        let pendingFilesToUpload = [];
-        
-        let appData = {
-            schedule: ['09:00', '13:00', '18:00', '22:00'],
-            stash: [],
-            savedTags: [],
-            slots: {}
-        };
 
-        let loadedImages = {};
-
-        function getImageInfo(item) {
-            if (!item) return { vaultKey: '', originalName: '', tag: 'Untagged' };
-            if (typeof item === 'object' && item.vaultKey) {
-                let name = item.originalName || item.vaultKey;
-                name = name.replace(/^QUEUE_DUMP_[^_]*_?/, '');
-                return { vaultKey: item.vaultKey, originalName: name, tag: item.tag || 'Untagged' };
-            }
-            let vaultKey = item;
-            let originalName = item;
-            if (item.includes('___')) {
-                originalName = item.split('___').slice(1).join('___');
-            } else {
-                originalName = item.replace(/^\d+_/, '');
-            }
-            originalName = originalName.replace(/^QUEUE_DUMP_[^_]*_?/, '');
-            return { vaultKey, originalName, tag: 'Untagged' };
-        }
-
-        // --- SUPABASE CLOUD SYNC ---
         function init() {
             const savedConfig = localStorage.getItem('supabaseConfig');
             if (savedConfig) {
                 dbConfig = JSON.parse(savedConfig);
-                fetchCloudData();
+                document.getElementById('dbModal').style.display = 'none';
+                
+                // Initialize both modular scripts
+                if(typeof initQueue === 'function') initQueue();
+                if(typeof initKaomoji === 'function') initKaomoji();
+                
+                switchTab('queue'); // Default Tab
             } else {
                 document.getElementById('dbModal').style.display = 'flex';
                 document.getElementById('cloudStatus').innerText = "AWAITING CREDENTIALS...";
@@ -357,8 +398,7 @@
             if (!dbConfig.url || !dbConfig.key) return alert("Requires both URL and Key");
             
             localStorage.setItem('supabaseConfig', JSON.stringify(dbConfig));
-            document.getElementById('dbModal').style.display = 'none';
-            fetchCloudData();
+            init();
         }
 
         function resetCredentials() {
@@ -368,563 +408,23 @@
             }
         }
 
-        async function fetchCloudData() {
-            document.getElementById('cloudStatus').innerText = "SYNCING WITH VAULT...";
-            try {
-                const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/state.json?t=${Date.now()}`, {
-                    headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
-                    cache: 'no-store'
-                });
-                
-                if (response.ok) {
-                    const json = await response.json();
-                    appData = { ...appData, ...json };
-                    if (!appData.savedTags) appData.savedTags = [];
-                    
-                    let migrated = false;
-                    Object.keys(appData.slots).forEach(key => {
-                        if(!key.startsWith('d1-') && !key.startsWith('d2-') && !key.startsWith('d3-')) {
-                            appData.slots[`d1-${key}`] = appData.slots[key];
-                            delete appData.slots[key];
-                            migrated = true;
-                        }
-                    });
-                    if(migrated) saveToCloud();
-                }
-
-                document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
-                document.getElementById('appInterface').style.display = 'block';
-                
-                await preloadAllImages();
-                renderApp();
-
-            } catch (err) {
-                document.getElementById('cloudStatus').innerText = "CONNECTION ERROR. CHECK CREDENTIALS.";
-                localStorage.removeItem('supabaseConfig');
-                document.getElementById('dbModal').style.display = 'flex';
-            }
-        }
-
-        function saveToCloud() {
-            document.getElementById('cloudStatus').innerText = "SAVING TO VAULT...";
-            updateCounters();
-            clearTimeout(syncTimeout);
-            syncTimeout = setTimeout(async () => {
-                try {
-                    const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
-                    await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
-                        method: 'POST',
-                        headers: { 
-                            'apikey': dbConfig.key, 
-                            'Authorization': `Bearer ${dbConfig.key}`,
-                            'Content-Type': 'application/json',
-                            'x-upsert': 'true'
-                        },
-                        body: blob
-                    });
-                    document.getElementById('cloudStatus').innerText = "(★) ALL CHANGES SAVED";
-                } catch (err) {
-                    document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
-                }
-            }, 1000);
-        }
-
-        async function uploadFileToVault(file) {
-            const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
-            const fileName = `${Date.now()}_${cleanName}`;
+        function switchTab(tab) {
+            document.getElementById('tab-queue').style.display = tab === 'queue' ? 'block' : 'none';
+            document.getElementById('tab-kaomoji').style.display = tab === 'kaomoji' ? 'block' : 'none';
             
-            await new Promise(r => setTimeout(r, 50));
+            document.getElementById('btn-tab-queue').className = tab === 'queue' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('btn-tab-kaomoji').className = tab === 'kaomoji' ? 'tab-btn active' : 'tab-btn';
 
-            const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
-                method: 'POST',
-                headers: { 
-                    'apikey': dbConfig.key, 
-                    'Authorization': `Bearer ${dbConfig.key}`,
-                    'Content-Type': file.type || 'image/jpeg'
-                },
-                body: file
-            });
-
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`Upload rejected (${res.status}): ${errText}`);
-            }
-
-            loadedImages[fileName] = URL.createObjectURL(file);
-            return fileName;
+            document.getElementById('headerCounters').style.display = tab === 'queue' ? 'block' : 'none';
         }
 
-        async function preloadAllImages() {
-            let filesToFetch = [];
-            appData.stash.forEach(item => {
-                const info = getImageInfo(item);
-                filesToFetch.push(info.vaultKey);
-            });
-            
-            Object.values(appData.slots).forEach(slot => {
-                if (slot.images) {
-                    slot.images.forEach(item => {
-                        const info = getImageInfo(item);
-                        filesToFetch.push(info.vaultKey);
-                    });
-                }
-            });
-
-            for (let fileName of filesToFetch) {
-                if (fileName && !loadedImages[fileName]) {
-                    try {
-                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
-                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
-                        });
-                        if (response.ok) {
-                            const blob = await response.blob();
-                            loadedImages[fileName] = URL.createObjectURL(blob);
-                        }
-                    } catch (e) {
-                        console.error("Failed to load image:", fileName);
-                    }
-                }
-            }
-        }
-
-        // --- NAVIGATION & COUNTERS ---
-        function changeDay(delta) {
-            currentDay += delta;
-            if(currentDay < 1) currentDay = 1;
-            if(currentDay > 3) currentDay = 3;
-            document.getElementById('dayDisplay').innerText = `Day ${currentDay}`;
-            renderApp();
-        }
-
-        function updateCounters() {
-            const stashCount = appData.stash.length;
-            const totalSlots = appData.schedule.length * 3;
-            
-            let filledSlots = 0;
-            Object.values(appData.slots).forEach(slot => {
-                if ((slot.images && slot.images.length > 0) || slot.caption) filledSlots++;
-            });
-
-            document.getElementById('headerCounters').innerHTML = `Stashed: <b>${stashCount}</b> &nbsp;|&nbsp; Slots Filled: <b>${filledSlots}</b> / ${totalSlots}`;
-            document.getElementById('stashWarning').style.display = stashCount >= 15 ? 'block' : 'none';
-        }
-
-        // --- CORE UI RENDER ---
-        function renderApp() {
-            appData.schedule.sort();
-            const schedContainer = document.getElementById('scheduled-container');
-            
-            schedContainer.innerHTML = '';
-            appData.schedule.forEach((time, index) => {
-                const id = `d${currentDay}-sched-${index}`;
-                schedContainer.innerHTML += createSlotHTML(id, `Post ${index + 1} - ${formatTime(time)}`);
-                hydrateSlotUI(id);
-            });
-
-            renderStash();
-            updateCounters();
-        }
-
-        function createSlotHTML(id, title) {
-            return `
-                <div class="slot" id="slot-${id}">
-                    <div class="slot-title">${title}</div>
-                    <input type="file" multiple accept="image/*,image/gif" onchange="uploadDirectToSlot(event, '${id}')">
-                    
-                    <div class="slot-gallery" id="gallery-${id}" style="display: none;"></div>
-                    
-                    <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
-                    
-                    <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
-                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
-                        <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Delete from DB)</button>
-                        <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot (Return to Stash)</button>
-                    </div>
-                </div>
-            `;
-        }
-
-        function hydrateSlotUI(id) {
-            if(!appData.slots[id]) return;
-            const data = appData.slots[id];
-            
-            document.getElementById(`caption-${id}`).value = data.caption || "";
-            
-            const gallery = document.getElementById(`gallery-${id}`);
-            const btnGroup = document.getElementById(`btnGroup-${id}`);
-            
-            if (data.images && data.images.length > 0) {
-                gallery.innerHTML = data.images.map((item, imgIndex) => {
-                    const info = getImageInfo(item);
-                    const url = loadedImages[info.vaultKey] || '';
-                    return `<div class="gallery-item"><img src="${url}" onclick="removeSingleImageFromSlot('${id}', ${imgIndex})" title="Click to return to Stash"></div>`;
-                }).join('');
-                gallery.style.display = 'flex';
-                btnGroup.style.display = 'flex';
-            } else if (data.caption) {
-                gallery.style.display = 'none';
-                btnGroup.style.display = 'flex';
-            } else {
-                gallery.style.display = 'none';
-                btnGroup.style.display = 'none';
-            }
-        }
-
-        function formatTime(time24h) {
-            let [hours, minutes] = time24h.split(':');
-            let ampm = hours >= 12 ? 'PM' : 'AM';
-            hours = hours % 12 || 12; 
-            return `${hours}:${minutes} ${ampm}`;
-        }
-
-        async function uploadDirectToSlot(event, id) {
-            const files = Array.from(event.target.files);
-            if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
-            
-            document.getElementById('cloudStatus').innerText = "UPLOADING BATCH DIRECT...";
-            
-            // PARALLEL UPLOAD ENGINE
-            const uploadPromises = files.map(async (file) => {
-                try {
-                    const fileName = await uploadFileToVault(file);
-                    return { vaultKey: fileName, originalName: file.name, tag: 'Direct' };
-                } catch(e) {
-                    alert(`Failed to upload ${file.name}: ${e.message}`);
-                    return null;
-                }
-            });
-
-            const results = await Promise.all(uploadPromises);
-            results.forEach(res => {
-                if (res) appData.slots[id].images.push(res);
-            });
-
-            hydrateSlotUI(id);
-            saveToCloud();
-            event.target.value = ""; 
-        }
-
-        function updateCaption(id, text) {
-            if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
-            appData.slots[id].caption = text;
-            saveToCloud();
-            hydrateSlotUI(id);
-        }
-
-        // --- CLEAR SLOT & REMOVE SINGLE IMAGE ---
-        function clearSlot(id) {
-            if (appData.slots[id] && appData.slots[id].images && appData.slots[id].images.length > 0) {
-                appData.slots[id].images.forEach(imgObj => {
-                    appData.stash.push(imgObj);
-                });
-            }
-            appData.slots[id] = { caption: "", images: [] };
-            hydrateSlotUI(id);
-            renderStash();
-            saveToCloud();
-        }
-
-        function removeSingleImageFromSlot(id, index) {
-            if (appData.slots[id] && appData.slots[id].images && appData.slots[id].images.length > index) {
-                const removedItem = appData.slots[id].images.splice(index, 1)[0];
-                appData.stash.push(removedItem);
-                
-                hydrateSlotUI(id);
-                renderStash();
-                saveToCloud();
-            }
-        }
-
-        function clearAllSlots() {
-            if(confirm("Are you sure you want to clear ALL 3 Days of slots? (Photos will return to your Stash)")) {
-                Object.keys(appData.slots).forEach(id => {
-                    if (appData.slots[id] && appData.slots[id].images) {
-                        appData.slots[id].images.forEach(imgObj => appData.stash.push(imgObj));
-                    }
-                });
-                appData.slots = {};
-                renderApp();
-                saveToCloud();
-            }
-        }
-
-        // --- STASH & TAG WORKFLOW ---
-        function updateStashFilter() {
-            currentStashFilter = document.getElementById('stashFilter').value;
-            renderStash();
-        }
-
-        function previewSelectedFiles(event) {
-            pendingFilesToUpload = Array.from(event.target.files);
-            let totalMB = pendingFilesToUpload.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024);
-            document.getElementById('uploadStatusText').innerText = `${pendingFilesToUpload.length} file(s) selected (${totalMB.toFixed(1)}MB total) ready to upload.`;
-        }
-
-        async function uploadAndSaveTag() {
-            if (pendingFilesToUpload.length === 0) {
-                return alert("Please click '+ Select Photos / GIFs' first!");
-            }
-            const tagInput = document.getElementById('stashTagInput').value.trim();
-            if (!tagInput) {
-                return alert("Please type or select a Tag / Set Name first!");
-            }
-
-            if (!appData.savedTags) appData.savedTags = [];
-            if (!appData.savedTags.includes(tagInput)) {
-                appData.savedTags.push(tagInput);
-            }
-
-            const statusEl = document.getElementById('uploadStatusText');
-            statusEl.innerText = `Uploading ${pendingFilesToUpload.length} file(s) simultaneously...`;
-
-            // PARALLEL UPLOAD ENGINE FOR STASH
-            const uploadPromises = pendingFilesToUpload.map(async (file) => {
-                try {
-                    const fileName = await uploadFileToVault(file);
-                    return { vaultKey: fileName, originalName: file.name, tag: tagInput };
-                } catch (err) {
-                    alert(`Failed to upload ${file.name}:\n\n${err.message}`);
-                    return null;
-                }
-            });
-
-            const results = await Promise.all(uploadPromises);
-            let successCount = 0;
-            results.forEach(res => {
-                if (res) {
-                    appData.stash.push(res);
-                    successCount++;
-                }
-            });
-
-            pendingFilesToUpload = [];
-            document.getElementById('stashFileSelect').value = "";
-            statusEl.innerText = `(★) Uploaded ${successCount} file(s) & saved to tag: ${tagInput}`;
-            
-            currentStashFilter = tagInput; 
-            renderStash();
-            saveToCloud();
-        }
-
-        function renderStash() {
-            updateCounters();
-            const previewContainer = document.getElementById('stashPreview');
-            const filterDropdown = document.getElementById('stashFilter');
-            const datalist = document.getElementById('savedTagsList');
-            
-            if (!appData.savedTags) appData.savedTags = [];
-            datalist.innerHTML = appData.savedTags.map(t => `<option value="${t}">`).join('');
-
-            const allTags = new Set([...appData.savedTags]);
-            appData.stash.forEach(item => allTags.add(getImageInfo(item).tag));
-            
-            let filterOptions = `<option value="All">View All Tags (${appData.stash.length})</option>`;
-            allTags.forEach(tag => {
-                const count = appData.stash.filter(i => getImageInfo(i).tag === tag).length;
-                const selected = tag === currentStashFilter ? 'selected' : '';
-                filterOptions += `<option value="${tag}" ${selected}>${tag} (${count})</option>`;
-            });
-            filterDropdown.innerHTML = filterOptions;
-
-            let html = '';
-            appData.stash.forEach((item, originalIndex) => {
-                const info = getImageInfo(item);
-                if(currentStashFilter === 'All' || info.tag === currentStashFilter) {
-                    const url = loadedImages[info.vaultKey] || '';
-                    let displayTag = info.tag !== 'Untagged' ? `<div class="stash-tag-badge">${info.tag}</div>` : '';
-                    html += `
-                        <div class="stash-thumb-wrapper">
-                            <img src="${url}" class="stash-thumb" onclick="removeFromStash(${originalIndex})" title="Click to remove">
-                            ${displayTag}
-                        </div>`;
-                }
-            });
-
-            if (html === '') {
-                previewContainer.innerHTML = '<span style="font-size: 12px; color: #aaa;">No items match this tag...</span>';
-            } else {
-                previewContainer.innerHTML = html;
-            }
-        }
-
-        function removeFromStash(index) {
-            appData.stash.splice(index, 1);
-            renderStash();
-            saveToCloud();
-        }
-
-        // --- RANDOMIZED CUSTOM AUTO-SLOT TARGETING ONLY EMPTY SLOTS ---
-        function autoFillDayCustom() {
-            let eligibleIndices = [];
-            appData.stash.forEach((item, idx) => {
-                const info = getImageInfo(item);
-                if (currentStashFilter === 'All' || info.tag === currentStashFilter) {
-                    eligibleIndices.push(idx);
-                }
-            });
-
-            if (eligibleIndices.length === 0) {
-                return alert("No items found in the current tag filter to auto-slot!");
-            }
-
-            let amountStr = document.getElementById('autoFillAmount').value;
-            let amount = parseInt(amountStr);
-
-            if (amount > eligibleIndices.length) {
-                amount = eligibleIndices.length;
-            }
-
-            const schedContainer = document.getElementById('scheduled-container');
-            const allSlots = Array.from(schedContainer.querySelectorAll('.slot'));
-            
-            // Filter to ONLY slots that are currently empty
-            const emptySlots = allSlots.filter(slotNode => {
-                const id = slotNode.id.replace('slot-', '');
-                return !appData.slots[id] || !appData.slots[id].images || appData.slots[id].images.length === 0;
-            });
-
-            if (emptySlots.length === 0) {
-                return alert("There are no empty slots left on this day! Clear a slot first.");
-            }
-
-            eligibleIndices.sort(() => Math.random() - 0.5);
-
-            let itemsToSlot = [];
-            let pulledIndices = eligibleIndices.slice(0, amount).sort((a, b) => b - a);
-            pulledIndices.forEach(idx => {
-                let removed = appData.stash.splice(idx, 1)[0];
-                itemsToSlot.push(removed);
-            });
-
-            itemsToSlot.sort(() => Math.random() - 0.5);
-
-            // Randomly distribute items among ONLY the empty slots
-            while (itemsToSlot.length > 0) {
-                const item = itemsToSlot.shift();
-                const randomSlotNode = emptySlots[Math.floor(Math.random() * emptySlots.length)];
-                const id = randomSlotNode.id.replace('slot-', '');
-                
-                if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
-                appData.slots[id].images.push(item);
-            }
-
-            renderApp();
-            saveToCloud();
-            alert(`Successfully pulled ${amount} item(s) into empty slots on Day ${currentDay}! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
-        }
-
-        // --- PREP POST & DOWNLOAD ---
-        async function prepForPost(id) {
-            const data = appData.slots[id];
-            if (!data) return;
-
-            if (data.caption) {
-                try { await navigator.clipboard.writeText(data.caption); } catch (err) {}
-            }
-
-            if (data.images && data.images.length > 0) {
-                for (let i = 0; i < data.images.length; i++) {
-                    const info = getImageInfo(data.images[i]);
-                    try {
-                        document.getElementById('cloudStatus').innerText = `DOWNLOADING ITEM ${i + 1} OF ${data.images.length}...`;
-                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}?t=${Date.now()}`, {
-                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
-                            cache: 'no-store'
-                        });
-                        
-                        if (response.ok) {
-                            const blob = await response.blob();
-                            const reader = new FileReader();
-                            await new Promise((resolve) => {
-                                reader.onloadend = () => {
-                                    const a = document.createElement('a');
-                                    a.style.display = 'none';
-                                    a.href = reader.result;
-                                    a.download = info.originalName;
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    resolve();
-                                };
-                                reader.readAsDataURL(blob);
-                            });
-                            if (i < data.images.length - 1) {
-                                await new Promise(resolve => setTimeout(resolve, 3500));
-                            }
-                        }
-                    } catch (e) {}
-                }
-                document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
-            }
-            alert("Caption copied & files downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
-        }
-
-        // --- MARK POSTED (DELETES ENTIRELY FROM DATABASE) ---
-        async function markAsPosted(id) {
-            const data = appData.slots[id];
-            if (!data || !data.images) return clearSlot(id);
-
-            if(!confirm("Mark posted? This will permanently delete these files from your Supabase Vault database to save space.")) return;
-
-            document.getElementById('cloudStatus').innerText = "DELETING FROM DB...";
-            for (let item of data.images) {
-                const info = getImageInfo(item);
-                try {
-                    await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'apikey': dbConfig.key,
-                            'Authorization': `Bearer ${dbConfig.key}`
-                        }
-                    });
-                } catch (err) {
-                    console.error("Failed to delete file from DB:", info.vaultKey);
-                }
-            }
-
-            appData.slots[id] = { caption: "", images: [] };
-            hydrateSlotUI(id);
-            saveToCloud();
-            alert("Deleted from database & cleared slot (★^O^★)");
-        }
-
-        // --- SETTINGS ---
-        function openSettings() {
-            const container = document.getElementById('scheduleInputsContainer');
-            container.innerHTML = '';
-            appData.schedule.forEach((time, index) => {
-                container.innerHTML += `
-                    <div class="time-row" id="time-row-${index}">
-                        <input type="time" class="input-field" style="margin:0; width:150px;" value="${time}">
-                        <button class="remove-btn" onclick="this.parentElement.remove()">X</button>
-                    </div>
-                `;
-            });
-            document.getElementById('settingsModal').style.display = 'flex';
-        }
-
-        function addTimeInput() {
-            const container = document.getElementById('scheduleInputsContainer');
-            const div = document.createElement('div');
-            div.className = 'time-row';
-            div.innerHTML = `
-                <input type="time" class="input-field" style="margin:0; width:150px;" value="12:00">
-                <button class="remove-btn" onclick="this.parentElement.remove()">X</button>
-            `;
-            container.appendChild(div);
-        }
-
-        function saveAndCloseSettings() {
-            const inputs = document.querySelectorAll('#scheduleInputsContainer input[type="time"]');
-            let newTimes = [];
-            inputs.forEach(input => { if(input.value) newTimes.push(input.value); });
-            appData.schedule = newTimes;
-            document.getElementById('settingsModal').style.display = 'none';
-            renderApp();
-            saveToCloud();
-        }
-
-        init();
+        window.onload = init;
     </script>
+
+    <!-- Modular Script Imports -->
+    <script src="queue.js"></script>
+    <script src="kaomoji.js"></script>
+
 </body>
 </html>
+
