@@ -540,8 +540,8 @@
                     
                     <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
                         <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
-                        <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Auto-Archive)</button>
-                        <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot</button>
+                        <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Delete from DB)</button>
+                        <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot (Return to Stash)</button>
                     </div>
                 </div>
             `;
@@ -605,14 +605,26 @@
             hydrateSlotUI(id);
         }
 
+        // --- CLEAR SLOT (RETURNS PHOTOS BACK TO STASH) ---
         function clearSlot(id) {
+            if (appData.slots[id] && appData.slots[id].images && appData.slots[id].images.length > 0) {
+                appData.slots[id].images.forEach(imgObj => {
+                    appData.stash.push(imgObj);
+                });
+            }
             appData.slots[id] = { caption: "", images: [] };
             hydrateSlotUI(id);
+            renderStash();
             saveToCloud();
         }
 
         function clearAllSlots() {
-            if(confirm("Are you sure you want to clear ALL 3 Days of slots?")) {
+            if(confirm("Are you sure you want to clear ALL 3 Days of slots? (Photos will return to your Stash)")) {
+                Object.keys(appData.slots).forEach(id => {
+                    if (appData.slots[id] && appData.slots[id].images) {
+                        appData.slots[id].images.forEach(imgObj => appData.stash.push(imgObj));
+                    }
+                });
                 appData.slots = {};
                 renderApp();
                 saveToCloud();
@@ -745,25 +757,19 @@
             const slots = Array.from(schedContainer.querySelectorAll('.slot'));
             if (slots.length === 0) return alert("No slots available on this day!");
 
-            // 1. Shuffle eligible indices randomly so we pick a random subset from the tag set
             eligibleIndices.sort(() => Math.random() - 0.5);
 
-            // 2. Extract the custom amount of items from the stash
             let itemsToSlot = [];
-            let pulledIndices = eligibleIndices.slice(0, amount).sort((a, b) => b - a); // sort descending for clean splicing
+            let pulledIndices = eligibleIndices.slice(0, amount).sort((a, b) => b - a);
             pulledIndices.forEach(idx => {
                 let removed = appData.stash.splice(idx, 1)[0];
                 itemsToSlot.push(removed);
             });
 
-            // 3. Shuffle the pulled items themselves so they are randomized
             itemsToSlot.sort(() => Math.random() - 0.5);
 
-            // 4. Distribute them randomly across the available day slots
             while (itemsToSlot.length > 0) {
                 const item = itemsToSlot.shift();
-                
-                // Pick a random slot from the day's slot list
                 const randomSlotNode = slots[Math.floor(Math.random() * slots.length)];
                 const id = randomSlotNode.id.replace('slot-', '');
                 
@@ -822,27 +828,33 @@
             alert("Caption copied & files downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
+        // --- MARK POSTED (DELETES ENTIRELY FROM DATABASE) ---
         async function markAsPosted(id) {
             const data = appData.slots[id];
             if (!data || !data.images) return clearSlot(id);
 
-            document.getElementById('cloudStatus').innerText = "ARCHIVING...";
+            if(!confirm("Mark posted? This will permanently delete these files from your Supabase Vault database to save space.")) return;
+
+            document.getElementById('cloudStatus').innerText = "DELETING FROM DB...";
             for (let item of data.images) {
                 const info = getImageInfo(item);
                 try {
-                    await fetch(`${dbConfig.url}/storage/v1/object/move`, {
-                        method: 'POST',
+                    await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
+                        method: 'DELETE',
                         headers: {
                             'apikey': dbConfig.key,
-                            'Authorization': `Bearer ${dbConfig.key}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ bucketId: 'vault', sourceKey: info.vaultKey, destinationKey: `posted/${info.vaultKey}` })
+                            'Authorization': `Bearer ${dbConfig.key}`
+                        }
                     });
-                } catch (err) {}
+                } catch (err) {
+                    console.error("Failed to delete file from DB:", info.vaultKey);
+                }
             }
-            clearSlot(id);
-            alert("Moved to posted folder & cleared (★^O^★)");
+
+            appData.slots[id] = { caption: "", images: [] };
+            hydrateSlotUI(id);
+            saveToCloud();
+            alert("Deleted from database & cleared slot (★^O^★)");
         }
 
         // --- SETTINGS ---
@@ -891,3 +903,4 @@
     </script>
 </body>
 </html>
+
