@@ -259,8 +259,21 @@
             </div>
             <div id="uploadStatusText" style="font-size: 11px; color: var(--dark-blue); text-align: center; margin-top: 5px; font-weight: bold;"></div>
 
-            <div style="margin-top: 10px;">
-                <button class="btn-style" onclick="autoFillDayCustom()" style="width: 100%; background: var(--hot-pink); color: white; border-color: var(--dark-blue);">(ﾉ◕ヮ◕)ﾉ Auto-Slot Custom Amount to Day</button>
+            <!-- Auto-Fill Dropdown UI -->
+            <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
+                <select id="autoFillAmount" class="input-field" style="margin-bottom: 0; width: 120px;">
+                    <option value="1">1 item</option>
+                    <option value="2">2 items</option>
+                    <option value="3" selected>3 items</option>
+                    <option value="4">4 items</option>
+                    <option value="5">5 items</option>
+                    <option value="6">6 items</option>
+                    <option value="7">7 items</option>
+                    <option value="8">8 items</option>
+                    <option value="9">9 items</option>
+                    <option value="10">10 items</option>
+                </select>
+                <button class="btn-style" onclick="autoFillDayCustom()" style="flex: 1; background: var(--hot-pink); color: white; border-color: var(--dark-blue);">(ﾉ◕ヮ◕)ﾉ Auto-Slot into Empty</button>
             </div>
         </div>
 
@@ -740,7 +753,7 @@
             saveToCloud();
         }
 
-        // --- RANDOMIZED CUSTOM AUTO-SLOT ---
+        // --- RANDOMIZED CUSTOM AUTO-SLOT TARGETING ONLY EMPTY SLOTS ---
         function autoFillDayCustom() {
             let eligibleIndices = [];
             appData.stash.forEach((item, idx) => {
@@ -754,18 +767,25 @@
                 return alert("No items found in the current tag filter to auto-slot!");
             }
 
-            let amountStr = prompt(`How many items from tag '${currentStashFilter}' do you want to pull into Day ${currentDay}? (Available: ${eligibleIndices.length})`, "3");
-            if (!amountStr) return;
+            let amountStr = document.getElementById('autoFillAmount').value;
             let amount = parseInt(amountStr);
-            if (isNaN(amount) || amount <= 0) return alert("Please enter a valid number.");
 
             if (amount > eligibleIndices.length) {
                 amount = eligibleIndices.length;
             }
 
             const schedContainer = document.getElementById('scheduled-container');
-            const slots = Array.from(schedContainer.querySelectorAll('.slot'));
-            if (slots.length === 0) return alert("No slots available on this day!");
+            const allSlots = Array.from(schedContainer.querySelectorAll('.slot'));
+            
+            // Filter to ONLY slots that are currently empty
+            const emptySlots = allSlots.filter(slotNode => {
+                const id = slotNode.id.replace('slot-', '');
+                return !appData.slots[id] || !appData.slots[id].images || appData.slots[id].images.length === 0;
+            });
+
+            if (emptySlots.length === 0) {
+                return alert("There are no empty slots left on this day! Clear a slot first.");
+            }
 
             eligibleIndices.sort(() => Math.random() - 0.5);
 
@@ -778,9 +798,10 @@
 
             itemsToSlot.sort(() => Math.random() - 0.5);
 
+            // Randomly distribute items among ONLY the empty slots
             while (itemsToSlot.length > 0) {
                 const item = itemsToSlot.shift();
-                const randomSlotNode = slots[Math.floor(Math.random() * slots.length)];
+                const randomSlotNode = emptySlots[Math.floor(Math.random() * emptySlots.length)];
                 const id = randomSlotNode.id.replace('slot-', '');
                 
                 if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
@@ -789,7 +810,7 @@
 
             renderApp();
             saveToCloud();
-            alert(`Successfully and randomly distributed ${amount} item(s) into Day ${currentDay} slots! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
+            alert(`Successfully pulled ${amount} item(s) into empty slots on Day ${currentDay}! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
         }
 
         // --- PREP POST & DOWNLOAD ---
