@@ -129,10 +129,9 @@
 
         /* Grid & Sections */
         .grid-container {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+            display: grid; grid-template-columns: 1fr; gap: 20px;
             max-width: 900px; margin: 0 auto;
         }
-        @media (max-width: 768px) { .grid-container { grid-template-columns: 1fr; } }
 
         .section {
             background: white; border: 3px solid var(--baby-blue);
@@ -278,13 +277,6 @@
                 <h2>(★) Scheduled</h2>
                 <div id="scheduled-container"></div>
             </div>
-
-            <!-- Random Column -->
-            <div class="section">
-                <h2>(★) Spontaneous</h2>
-                <div id="random-container"></div>
-                <button class="btn-style" style="width: 100%; margin-top: 15px;" onclick="addRandomSlot()">+ Add Random Slot</button>
-            </div>
         </div>
 
         <!-- Clear All Button -->
@@ -309,7 +301,6 @@
         
         let appData = {
             schedule: ['09:00', '13:00', '18:00', '22:00'],
-            randomSlotCount: 3,
             stash: [],
             savedTags: [],
             slots: {}
@@ -494,7 +485,7 @@
 
         function updateCounters() {
             const stashCount = appData.stash.length;
-            const totalSlots = (appData.schedule.length + appData.randomSlotCount) * 3;
+            const totalSlots = appData.schedule.length * 3;
             
             let filledSlots = 0;
             Object.values(appData.slots).forEach(slot => {
@@ -509,7 +500,6 @@
         function renderApp() {
             appData.schedule.sort();
             const schedContainer = document.getElementById('scheduled-container');
-            const randContainer = document.getElementById('random-container');
             
             schedContainer.innerHTML = '';
             appData.schedule.forEach((time, index) => {
@@ -517,13 +507,6 @@
                 schedContainer.innerHTML += createSlotHTML(id, `Post ${index + 1} - ${formatTime(time)}`);
                 hydrateSlotUI(id);
             });
-
-            randContainer.innerHTML = '';
-            for(let i = 0; i < appData.randomSlotCount; i++) {
-                const id = `d${currentDay}-rand-${i}`;
-                randContainer.innerHTML += createSlotHTML(id, `Spontaneous Post`);
-                hydrateSlotUI(id);
-            }
 
             renderStash();
             updateCounters();
@@ -920,14 +903,7 @@
             saveToCloud();
         }
 
-        function addRandomSlot() {
-            appData.randomSlotCount++;
-            renderApp();
-            saveToCloud();
-        }
-
         init();
     </script>
 </body>
 </html>
-
