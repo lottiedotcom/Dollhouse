@@ -246,12 +246,18 @@
             <div class="stash-preview-container" id="stashPreview">
                 <span style="font-size: 12px; color: #aaa;">Dump photos here to use later...</span>
             </div>
+            
             <div class="stash-actions">
                 <label class="btn-style" style="flex: 1; text-align: center;">
-                    + Dump Photos
-                    <input type="file" multiple accept="image/*" style="display: none;" onchange="uploadToStash(event)">
+                    + Select Photos
+                    <input type="file" id="stashFileSelect" multiple accept="image/*" style="display: none;" onchange="previewSelectedFiles(event)">
                 </label>
-                <button class="btn-style" onclick="autoFillDay()" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);">(ﾉ◕ヮ◕)ﾉ Auto-Slot Day</button>
+                <button class="btn-style" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);" onclick="uploadAndSaveTag()">(★) Upload & Save Tag</button>
+            </div>
+            <div id="uploadStatusText" style="font-size: 11px; color: var(--dark-blue); text-align: center; margin-top: 5px; font-weight: bold;"></div>
+
+            <div style="margin-top: 10px;">
+                <button class="btn-style" onclick="autoFillDayCustom()" style="width: 100%; background: var(--hot-pink); color: white; border-color: var(--dark-blue);">(ﾉ◕ヮ◕)ﾉ Auto-Slot Custom Amount to Day</button>
             </div>
         </div>
 
@@ -295,6 +301,7 @@
         let syncTimeout;
         let currentDay = 1;
         let currentStashFilter = 'All';
+        let pendingFilesToUpload = [];
         
         let appData = {
             schedule: ['09:00', '13:00', '18:00', '22:00'],
@@ -305,7 +312,6 @@
 
         let loadedImages = {};
 
-        // Helper to normalize image records with Tag support
         function getImageInfo(item) {
             if (!item) return { vaultKey: '', originalName: '', tag: 'Untagged' };
             if (typeof item === 'object' && item.vaultKey) {
@@ -347,7 +353,7 @@
         }
 
         function resetCredentials() {
-            if(confirm("Are you sure you want to disconnect your Vault? You will need to re-enter your Supabase URL and Key.")) {
+            if(confirm("Are you sure you want to disconnect your Vault?")) {
                 localStorage.removeItem('supabaseConfig');
                 location.reload();
             }
@@ -365,7 +371,6 @@
                     const json = await response.json();
                     appData = { ...appData, ...json };
                     
-                    // Legacy migration: Move old generic slots into Day 1
                     let migrated = false;
                     Object.keys(appData.slots).forEach(key => {
                         if(!key.startsWith('d1-') && !key.startsWith('d2-') && !key.startsWith('d3-')) {
@@ -375,9 +380,6 @@
                         }
                     });
                     if(migrated) saveToCloud();
-                    
-                } else if (response.status === 400 || response.status === 404) {
-                    if(!response.url.includes('supabase')) alert("Warning: It looks like you didn't enter a valid Supabase URL.");
                 }
 
                 document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
@@ -417,11 +419,8 @@
             }, 1000);
         }
 
-        // --- RAW FILE HANDLING ---
         async function uploadFileToVault(file) {
-            document.getElementById('cloudStatus').innerText = "UPLOADING HIGH-RES FILE...";
             const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-            
             await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
                 method: 'POST',
                 headers: { 
@@ -431,9 +430,7 @@
                 },
                 body: file
             });
-
             loadedImages[fileName] = URL.createObjectURL(file);
-            document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             return fileName;
         }
 
@@ -520,7 +517,7 @@
             return `
                 <div class="slot" id="slot-${id}">
                     <div class="slot-title">${title}</div>
-                    <input type="file" multiple accept="image/*" onchange="uploadToSlot(event, '${id}')">
+                    <input type="file" multiple accept="image/*" onchange="uploadDirectToSlot(event, '${id}')">
                     
                     <div class="slot-gallery" id="gallery-${id}" style="display: none;"></div>
                     
@@ -568,16 +565,14 @@
             return `${hours}:${minutes} ${ampm}`;
         }
 
-        // --- DATA HANDLING ---
-        async function uploadToSlot(event, id) {
+        async function uploadDirectToSlot(event, id) {
             const files = Array.from(event.target.files);
             if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
             
             for (let file of files) {
                 const fileName = await uploadFileToVault(file);
-                appData.slots[id].images.push({ vaultKey: fileName, originalName: file.name, tag: 'Direct Slot' });
+                appData.slots[id].images.push({ vaultKey: fileName, originalName: file.name, tag: 'Direct' });
             }
-            
             hydrateSlotUI(id);
             saveToCloud();
             event.target.value = ""; 
@@ -597,32 +592,48 @@
         }
 
         function clearAllSlots() {
-            if(confirm("Are you sure you want to clear ALL 3 Days of slots? (This won't delete photos from your Vault).")) {
-                document.getElementById('cloudStatus').innerText = "CLEARING ALL SLOTS...";
+            if(confirm("Are you sure you want to clear ALL 3 Days of slots?")) {
                 appData.slots = {};
                 renderApp();
                 saveToCloud();
-                document.getElementById('cloudStatus').innerText = "(★) ALL SLOTS CLEARED";
             }
         }
 
-        // --- STASH & AUTO-FILL ---
+        // --- STASH & TAG WORKFLOW ---
         function updateStashFilter() {
             currentStashFilter = document.getElementById('stashFilter').value;
             renderStash();
         }
 
-        async function uploadToStash(event) {
-            const files = Array.from(event.target.files);
-            const tagInput = document.getElementById('stashTagInput').value.trim() || 'Untagged';
+        function previewSelectedFiles(event) {
+            pendingFilesToUpload = Array.from(event.target.files);
+            document.getElementById('uploadStatusText').innerText = `${pendingFilesToUpload.length} photo(s) selected ready to upload.`;
+        }
 
-            for (let file of files) {
+        async function uploadAndSaveTag() {
+            if (pendingFilesToUpload.length === 0) {
+                return alert("Please click '+ Select Photos' first!");
+            }
+            const tagInput = document.getElementById('stashTagInput').value.trim();
+            if (!tagInput) {
+                return alert("Please type a Tag / Set Name first!");
+            }
+
+            const statusEl = document.getElementById('uploadStatusText');
+            for (let i = 0; i < pendingFilesToUpload.length; i++) {
+                statusEl.innerText = `Uploading ${i + 1} of ${pendingFilesToUpload.length}...`;
+                const file = pendingFilesToUpload[i];
                 const fileName = await uploadFileToVault(file);
                 appData.stash.push({ vaultKey: fileName, originalName: file.name, tag: tagInput });
-                renderStash();
             }
+
+            pendingFilesToUpload = [];
+            document.getElementById('stashFileSelect').value = "";
+            statusEl.innerText = "(★) Successfully uploaded and saved to tag: " + tagInput;
+            
+            currentStashFilter = tagInput; // Automatically switch filter to newly saved tag
+            renderStash();
             saveToCloud();
-            event.target.value = "";
         }
 
         function renderStash() {
@@ -630,28 +641,17 @@
             const previewContainer = document.getElementById('stashPreview');
             const filterDropdown = document.getElementById('stashFilter');
             
-            // Build unique tags for dropdown
             const tags = new Set();
             appData.stash.forEach(item => tags.add(getImageInfo(item).tag));
             
-            let filterOptions = `<option value="All">View All Tags</option>`;
+            let filterOptions = `<option value="All">View All Tags (${appData.stash.length})</option>`;
             tags.forEach(tag => {
+                const count = appData.stash.filter(i => getImageInfo(i).tag === tag).length;
                 const selected = tag === currentStashFilter ? 'selected' : '';
-                filterOptions += `<option value="${tag}" ${selected}>${tag}</option>`;
+                filterOptions += `<option value="${tag}" ${selected}>${tag} (${count})</option>`;
             });
             filterDropdown.innerHTML = filterOptions;
 
-            // Filter items visually
-            const visibleItems = appData.stash.filter(item => 
-                currentStashFilter === 'All' || getImageInfo(item).tag === currentStashFilter
-            );
-
-            if (visibleItems.length === 0) {
-                previewContainer.innerHTML = '<span style="font-size: 12px; color: #aaa;">No photos match this tag...</span>';
-                return;
-            }
-
-            // In order to delete correct item, we map over the full stash and check filter
             let html = '';
             appData.stash.forEach((item, originalIndex) => {
                 const info = getImageInfo(item);
@@ -665,7 +665,12 @@
                         </div>`;
                 }
             });
-            previewContainer.innerHTML = html;
+
+            if (html === '') {
+                previewContainer.innerHTML = '<span style="font-size: 12px; color: #aaa;">No photos match this tag...</span>';
+            } else {
+                previewContainer.innerHTML = html;
+            }
         }
 
         function removeFromStash(index) {
@@ -674,51 +679,67 @@
             saveToCloud();
         }
 
-        function autoFillDay() {
+        function autoFillDayCustom() {
+            // Find active tag items
+            let eligibleIndices = [];
+            appData.stash.forEach((item, idx) => {
+                const info = getImageInfo(item);
+                if (currentStashFilter === 'All' || info.tag === currentStashFilter) {
+                    eligibleIndices.push(idx);
+                }
+            });
+
+            if (eligibleIndices.length === 0) {
+                return alert("No photos found in the current tag filter to auto-slot!");
+            }
+
+            let amountStr = prompt(`How many photos from tag '${currentStashFilter}' do you want to pull into Day ${currentDay}? (Available: ${eligibleIndices.length})`, "3");
+            if (!amountStr) return;
+            let amount = parseInt(amountStr);
+            if (isNaN(amount) || amount <= 0) return alert("Please enter a valid number.");
+
+            if (amount > eligibleIndices.length) {
+                amount = eligibleIndices.length;
+            }
+
             const schedContainer = document.getElementById('scheduled-container');
             const slots = Array.from(schedContainer.querySelectorAll('.slot'));
+            if (slots.length === 0) return alert("No slots available on this day!");
 
-            if (slots.length === 0) return alert("Check if you have slots!");
-
-            // Grab only items that match current filter
+            // Extract exact items from stash (from highest index to lowest to avoid splicing shifts)
             let itemsToSlot = [];
-            for (let i = appData.stash.length - 1; i >= 0; i--) {
-                const info = getImageInfo(appData.stash[i]);
-                if (currentStashFilter === 'All' || info.tag === currentStashFilter) {
-                    itemsToSlot.push(appData.stash.splice(i, 1)[0]);
-                }
-            }
-            itemsToSlot.reverse(); // Restore original order
+            let pulledIndices = eligibleIndices.slice(0, amount).reverse();
+            pulledIndices.forEach(idx => {
+                let removed = appData.stash.splice(idx, 1)[0];
+                itemsToSlot.push(removed);
+            });
+            itemsToSlot.reverse();
 
-            if (itemsToSlot.length === 0) return alert("No stash items match your current tag filter!");
-
+            // Distribute into slots sequentially
             let slotIndex = 0;
             while (itemsToSlot.length > 0) {
-                const item = itemsToSlot.shift(); 
+                const item = itemsToSlot.shift();
                 const targetSlot = slots[slotIndex];
-                const id = targetSlot.id.replace('slot-', ''); // gives e.g. d1-sched-0
+                const id = targetSlot.id.replace('slot-', '');
                 
                 if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
                 appData.slots[id].images.push(item);
                 
                 slotIndex = (slotIndex + 1) % slots.length;
             }
-            
+
             renderApp();
             saveToCloud();
+            alert(`Successfully pulled ${amount} photo(s) into Day ${currentDay} slots! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
         }
 
-        // --- PREP POST & SEQUENTIAL FILE DOWNLOAD WITH DIAGNOSTICS ---
+        // --- PREP POST & DOWNLOAD ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
 
             if (data.caption) {
-                try {
-                    await navigator.clipboard.writeText(data.caption);
-                } catch (err) {
-                    alert(`Caption copy failed:\n\n${err.message}`);
-                }
+                try { await navigator.clipboard.writeText(data.caption); } catch (err) {}
             }
 
             if (data.images && data.images.length > 0) {
@@ -726,7 +747,6 @@
                     const info = getImageInfo(data.images[i]);
                     try {
                         document.getElementById('cloudStatus').innerText = `DOWNLOADING PHOTO ${i + 1} OF ${data.images.length}...`;
-                        
                         const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}?t=${Date.now()}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
                             cache: 'no-store'
@@ -735,39 +755,24 @@
                         if (response.ok) {
                             const blob = await response.blob();
                             const reader = new FileReader();
-                            await new Promise((resolve, reject) => {
+                            await new Promise((resolve) => {
                                 reader.onloadend = () => {
-                                    try {
-                                        const a = document.createElement('a');
-                                        a.style.display = 'none';
-                                        a.href = reader.result;
-                                        a.download = info.originalName;
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        document.body.removeChild(a);
-                                        resolve();
-                                    } catch (clickErr) {
-                                        alert(`Download step failed for ${info.originalName}:\n\n${clickErr.message}`);
-                                        reject(clickErr);
-                                    }
-                                };
-                                reader.onerror = () => {
-                                    alert(`Failed to convert image data for ${info.originalName}:\n\n${reader.error.message}`);
-                                    reject(reader.error);
+                                    const a = document.createElement('a');
+                                    a.style.display = 'none';
+                                    a.href = reader.result;
+                                    a.download = info.originalName;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    resolve();
                                 };
                                 reader.readAsDataURL(blob);
                             });
-                            
                             if (i < data.images.length - 1) {
                                 await new Promise(resolve => setTimeout(resolve, 3500));
                             }
-                        } else {
-                            const errorText = await response.text();
-                            alert(`Supabase refused the download for ${info.originalName}!\n\nStatus Code: ${response.status}\nError: ${errorText}`);
                         }
-                    } catch (e) {
-                        alert(`Network Error on ${info.originalName}:\n\n${e.message}\n\nPlease check your internet connection.`);
-                    }
+                    } catch (e) {}
                 }
                 document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             }
@@ -778,8 +783,7 @@
             const data = appData.slots[id];
             if (!data || !data.images) return clearSlot(id);
 
-            document.getElementById('cloudStatus').innerText = "ARCHIVING POSTED FILES...";
-
+            document.getElementById('cloudStatus').innerText = "ARCHIVING...";
             for (let item of data.images) {
                 const info = getImageInfo(item);
                 try {
@@ -790,22 +794,15 @@
                             'Authorization': `Bearer ${dbConfig.key}`,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({
-                            bucketId: 'vault',
-                            sourceKey: info.vaultKey,
-                            destinationKey: `posted/${info.vaultKey}`
-                        })
+                        body: JSON.stringify({ bucketId: 'vault', sourceKey: info.vaultKey, destinationKey: `posted/${info.vaultKey}` })
                     });
-                } catch (err) {
-                    console.error("Failed to move file in cloud:", info.vaultKey);
-                }
+                } catch (err) {}
             }
-
             clearSlot(id);
-            alert("moved to posted folder & cleared (★^O^★)");
+            alert("Moved to posted folder & cleared (★^O^★)");
         }
 
-        // --- SETTINGS MODAL LOGIC ---
+        // --- SETTINGS ---
         function openSettings() {
             const container = document.getElementById('scheduleInputsContainer');
             container.innerHTML = '';
@@ -835,7 +832,6 @@
             const inputs = document.querySelectorAll('#scheduleInputsContainer input[type="time"]');
             let newTimes = [];
             inputs.forEach(input => { if(input.value) newTimes.push(input.value); });
-            
             appData.schedule = newTimes;
             document.getElementById('settingsModal').style.display = 'none';
             renderApp();
