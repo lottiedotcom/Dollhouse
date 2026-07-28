@@ -63,13 +63,19 @@
         }
 
         .header {
-            display: flex; justify-content: space-between; align-items: center;
+            display: flex; flex-direction: column; gap: 10px;
             background: var(--baby-pink); border: 3px outset var(--hot-pink);
             padding: 10px 15px; margin-bottom: 10px; border-radius: 10px;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
         }
 
+        .header-top { display: flex; justify-content: space-between; align-items: center; }
         .header h1 { margin: 0; font-size: 20px; text-shadow: 1px 1px white; }
+
+        .header-stats {
+            background: #fff; border: 2px inset var(--baby-blue); border-radius: 5px;
+            padding: 8px; font-size: 12px; text-align: center; color: var(--dark-blue);
+        }
 
         .btn-style {
             background: var(--baby-blue); border: 2px outset var(--dark-blue);
@@ -98,12 +104,28 @@
             background: #fdfdfd; padding: 10px; border-radius: 5px;
         }
 
+        .stash-thumb-wrapper { position: relative; flex-shrink: 0; }
+        
         .stash-thumb {
             width: 70px; height: 70px; border-radius: 5px; object-fit: cover;
-            border: 2px outset var(--baby-blue); flex-shrink: 0; cursor: pointer;
+            border: 2px outset var(--baby-blue); cursor: pointer;
+        }
+        
+        .stash-tag-badge {
+            position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%);
+            background: var(--hot-pink); color: white; font-size: 9px; padding: 2px 5px;
+            border-radius: 10px; white-space: nowrap; border: 1px solid white; pointer-events: none;
         }
 
         .stash-actions { display: flex; gap: 10px; margin-top: 10px; }
+
+        /* Day Navigation */
+        .day-navigation {
+            display: flex; justify-content: center; align-items: center; gap: 20px;
+            margin: 20px 0;
+        }
+        .day-navigation h2 { margin: 0; color: var(--dark-blue); text-shadow: 1px 1px white; }
+        .nav-arrow { font-size: 20px; padding: 5px 15px; background: var(--baby-pink); border-color: var(--hot-pink); }
 
         /* Grid & Sections */
         .grid-container {
@@ -187,12 +209,20 @@
             <div id="scheduleInputsContainer"></div>
             <button class="btn-style" style="width: 100%; margin: 15px 0; background: var(--baby-pink);" onclick="addTimeInput()">+ Add Time</button>
             <button class="btn-style" style="width: 100%;" onclick="saveAndCloseSettings()">Save & Close</button>
+            
+            <hr style="border: 1px dashed #ccc; margin: 20px 0;">
+            <button class="btn-style" style="width: 100%; background: #ff9999; color: white; border-color: #cc0000;" onclick="resetCredentials()">(★) Disconnect / Reset Vault</button>
         </div>
     </div>
 
     <div class="header">
-        <h1>(★) Queue Manager</h1>
-        <button class="btn-style" onclick="openSettings()">(★) Schedule</button>
+        <div class="header-top">
+            <h1>(★) Queue Manager</h1>
+            <button class="btn-style" onclick="openSettings()">(★) Schedule</button>
+        </div>
+        <div class="header-stats" id="headerCounters">
+            Stashed: <b>0</b> &nbsp;|&nbsp; Slots Filled: <b>0</b> / 0
+        </div>
     </div>
 
     <div id="cloudStatus">Checking connection...</div>
@@ -203,8 +233,16 @@
         <div class="stash-drawer">
             <div class="stash-header">
                 <span>(★) Content Stash</span>
-                <span id="stashCount" style="font-size: 12px; color: #666;">0 items</span>
             </div>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="stashTagInput" class="input-field" style="margin-bottom:0; flex: 1;" placeholder="Set/Tag Name (e.g. Pink Set)">
+                <select id="stashFilter" class="input-field" style="margin-bottom:0; flex: 1;" onchange="updateStashFilter()">
+                    <option value="All">View All Tags</option>
+                </select>
+            </div>
+            <div id="stashWarning" style="display:none; color: #cc0000; font-size: 11px; margin-bottom: 10px;">★ Tip: Keep stash small (10-15 max) to avoid overwhelm!</div>
+
             <div class="stash-preview-container" id="stashPreview">
                 <span style="font-size: 12px; color: #aaa;">Dump photos here to use later...</span>
             </div>
@@ -213,14 +251,21 @@
                     + Dump Photos
                     <input type="file" multiple accept="image/*" style="display: none;" onchange="uploadToStash(event)">
                 </label>
-                <button class="btn-style" onclick="autoFillDay()" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);">(ﾉ◕ヮ◕)ﾉ Auto-Slot</button>
+                <button class="btn-style" onclick="autoFillDay()" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);">(ﾉ◕ヮ◕)ﾉ Auto-Slot Day</button>
             </div>
+        </div>
+
+        <!-- 3-Day Navigation -->
+        <div class="day-navigation">
+            <button class="btn-style nav-arrow" onclick="changeDay(-1)">&#9664;</button>
+            <h2 id="dayDisplay">Day 1</h2>
+            <button class="btn-style nav-arrow" onclick="changeDay(1)">&#9654;</button>
         </div>
 
         <div class="grid-container">
             <!-- Scheduled Column -->
             <div class="section">
-                <h2>(★) Daily Schedule</h2>
+                <h2>(★) Scheduled</h2>
                 <div id="scheduled-container"></div>
             </div>
 
@@ -246,9 +291,10 @@
             });
         }
 
-        // Supabase Vault Credentials
         let dbConfig = { url: '', key: '' };
         let syncTimeout;
+        let currentDay = 1;
+        let currentStashFilter = 'All';
         
         let appData = {
             schedule: ['09:00', '13:00', '18:00', '22:00'],
@@ -259,13 +305,13 @@
 
         let loadedImages = {};
 
-        // Helper to normalize image records
+        // Helper to normalize image records with Tag support
         function getImageInfo(item) {
-            if (!item) return { vaultKey: '', originalName: '' };
+            if (!item) return { vaultKey: '', originalName: '', tag: 'Untagged' };
             if (typeof item === 'object' && item.vaultKey) {
                 let name = item.originalName || item.vaultKey;
                 name = name.replace(/^QUEUE_DUMP_[^_]*_?/, '');
-                return { vaultKey: item.vaultKey, originalName: name };
+                return { vaultKey: item.vaultKey, originalName: name, tag: item.tag || 'Untagged' };
             }
             let vaultKey = item;
             let originalName = item;
@@ -275,7 +321,7 @@
                 originalName = item.replace(/^\d+_/, '');
             }
             originalName = originalName.replace(/^QUEUE_DUMP_[^_]*_?/, '');
-            return { vaultKey, originalName };
+            return { vaultKey, originalName, tag: 'Untagged' };
         }
 
         // --- SUPABASE CLOUD SYNC ---
@@ -300,10 +346,16 @@
             fetchCloudData();
         }
 
+        function resetCredentials() {
+            if(confirm("Are you sure you want to disconnect your Vault? You will need to re-enter your Supabase URL and Key.")) {
+                localStorage.removeItem('supabaseConfig');
+                location.reload();
+            }
+        }
+
         async function fetchCloudData() {
             document.getElementById('cloudStatus').innerText = "SYNCING WITH VAULT...";
             try {
-                // Ensure we bypass cache when syncing the main JSON file
                 const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/state.json?t=${Date.now()}`, {
                     headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
                     cache: 'no-store'
@@ -312,6 +364,20 @@
                 if (response.ok) {
                     const json = await response.json();
                     appData = { ...appData, ...json };
+                    
+                    // Legacy migration: Move old generic slots into Day 1
+                    let migrated = false;
+                    Object.keys(appData.slots).forEach(key => {
+                        if(!key.startsWith('d1-') && !key.startsWith('d2-') && !key.startsWith('d3-')) {
+                            appData.slots[`d1-${key}`] = appData.slots[key];
+                            delete appData.slots[key];
+                            migrated = true;
+                        }
+                    });
+                    if(migrated) saveToCloud();
+                    
+                } else if (response.status === 400 || response.status === 404) {
+                    if(!response.url.includes('supabase')) alert("Warning: It looks like you didn't enter a valid Supabase URL.");
                 }
 
                 document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
@@ -329,6 +395,7 @@
 
         function saveToCloud() {
             document.getElementById('cloudStatus').innerText = "SAVING TO VAULT...";
+            updateCounters();
             clearTimeout(syncTimeout);
             syncTimeout = setTimeout(async () => {
                 try {
@@ -371,13 +438,23 @@
         }
 
         async function preloadAllImages() {
-            let filesToFetch = [...appData.stash];
+            let filesToFetch = [];
+            appData.stash.forEach(item => {
+                const info = getImageInfo(item);
+                filesToFetch.push(info.vaultKey);
+            });
+            
             Object.values(appData.slots).forEach(slot => {
-                if (slot.images) filesToFetch.push(...slot.images);
+                if (slot.images) {
+                    slot.images.forEach(item => {
+                        const info = getImageInfo(item);
+                        filesToFetch.push(info.vaultKey);
+                    });
+                }
             });
 
             for (let fileName of filesToFetch) {
-                if (!loadedImages[fileName]) {
+                if (fileName && !loadedImages[fileName]) {
                     try {
                         const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
@@ -393,6 +470,28 @@
             }
         }
 
+        // --- NAVIGATION & COUNTERS ---
+        function changeDay(delta) {
+            currentDay += delta;
+            if(currentDay < 1) currentDay = 1;
+            if(currentDay > 3) currentDay = 3;
+            document.getElementById('dayDisplay').innerText = `Day ${currentDay}`;
+            renderApp();
+        }
+
+        function updateCounters() {
+            const stashCount = appData.stash.length;
+            const totalSlots = (appData.schedule.length + appData.randomSlotCount) * 3;
+            
+            let filledSlots = 0;
+            Object.values(appData.slots).forEach(slot => {
+                if ((slot.images && slot.images.length > 0) || slot.caption) filledSlots++;
+            });
+
+            document.getElementById('headerCounters').innerHTML = `Stashed: <b>${stashCount}</b> &nbsp;|&nbsp; Slots Filled: <b>${filledSlots}</b> / ${totalSlots}`;
+            document.getElementById('stashWarning').style.display = stashCount >= 15 ? 'block' : 'none';
+        }
+
         // --- CORE UI RENDER ---
         function renderApp() {
             appData.schedule.sort();
@@ -401,19 +500,20 @@
             
             schedContainer.innerHTML = '';
             appData.schedule.forEach((time, index) => {
-                const id = `sched-${index}`;
+                const id = `d${currentDay}-sched-${index}`;
                 schedContainer.innerHTML += createSlotHTML(id, `Post ${index + 1} - ${formatTime(time)}`);
                 hydrateSlotUI(id);
             });
 
             randContainer.innerHTML = '';
             for(let i = 0; i < appData.randomSlotCount; i++) {
-                const id = `rand-${i}`;
+                const id = `d${currentDay}-rand-${i}`;
                 randContainer.innerHTML += createSlotHTML(id, `Spontaneous Post`);
                 hydrateSlotUI(id);
             }
 
             renderStash();
+            updateCounters();
         }
 
         function createSlotHTML(id, title) {
@@ -445,8 +545,9 @@
             const btnGroup = document.getElementById(`btnGroup-${id}`);
             
             if (data.images && data.images.length > 0) {
-                gallery.innerHTML = data.images.map(fileName => {
-                    const url = loadedImages[fileName] || '';
+                gallery.innerHTML = data.images.map(item => {
+                    const info = getImageInfo(item);
+                    const url = loadedImages[info.vaultKey] || '';
                     return `<div class="gallery-item"><img src="${url}"></div>`;
                 }).join('');
                 gallery.style.display = 'flex';
@@ -474,7 +575,7 @@
             
             for (let file of files) {
                 const fileName = await uploadFileToVault(file);
-                appData.slots[id].images.push(fileName);
+                appData.slots[id].images.push({ vaultKey: fileName, originalName: file.name, tag: 'Direct Slot' });
             }
             
             hydrateSlotUI(id);
@@ -496,13 +597,9 @@
         }
 
         function clearAllSlots() {
-            if(confirm("Are you sure you want to clear ALL scheduled slots? (This won't delete the actual photos from your Vault).")) {
+            if(confirm("Are you sure you want to clear ALL 3 Days of slots? (This won't delete photos from your Vault).")) {
                 document.getElementById('cloudStatus').innerText = "CLEARING ALL SLOTS...";
-                
-                Object.keys(appData.slots).forEach(id => {
-                    appData.slots[id] = { caption: "", images: [] };
-                });
-                
+                appData.slots = {};
                 renderApp();
                 saveToCloud();
                 document.getElementById('cloudStatus').innerText = "(★) ALL SLOTS CLEARED";
@@ -510,11 +607,18 @@
         }
 
         // --- STASH & AUTO-FILL ---
+        function updateStashFilter() {
+            currentStashFilter = document.getElementById('stashFilter').value;
+            renderStash();
+        }
+
         async function uploadToStash(event) {
             const files = Array.from(event.target.files);
+            const tagInput = document.getElementById('stashTagInput').value.trim() || 'Untagged';
+
             for (let file of files) {
                 const fileName = await uploadFileToVault(file);
-                appData.stash.push(fileName);
+                appData.stash.push({ vaultKey: fileName, originalName: file.name, tag: tagInput });
                 renderStash();
             }
             saveToCloud();
@@ -522,18 +626,46 @@
         }
 
         function renderStash() {
-            document.getElementById('stashCount').innerText = `${appData.stash.length} items`;
+            updateCounters();
             const previewContainer = document.getElementById('stashPreview');
+            const filterDropdown = document.getElementById('stashFilter');
             
-            if (appData.stash.length === 0) {
-                previewContainer.innerHTML = '<span style="font-size: 12px; color: #aaa;">Dump photos here to use later...</span>';
+            // Build unique tags for dropdown
+            const tags = new Set();
+            appData.stash.forEach(item => tags.add(getImageInfo(item).tag));
+            
+            let filterOptions = `<option value="All">View All Tags</option>`;
+            tags.forEach(tag => {
+                const selected = tag === currentStashFilter ? 'selected' : '';
+                filterOptions += `<option value="${tag}" ${selected}>${tag}</option>`;
+            });
+            filterDropdown.innerHTML = filterOptions;
+
+            // Filter items visually
+            const visibleItems = appData.stash.filter(item => 
+                currentStashFilter === 'All' || getImageInfo(item).tag === currentStashFilter
+            );
+
+            if (visibleItems.length === 0) {
+                previewContainer.innerHTML = '<span style="font-size: 12px; color: #aaa;">No photos match this tag...</span>';
                 return;
             }
 
-            previewContainer.innerHTML = appData.stash.map((fileName, index) => {
-                const url = loadedImages[fileName] || '';
-                return `<img src="${url}" class="stash-thumb" onclick="removeFromStash(${index})" title="Click to remove">`;
-            }).join('');
+            // In order to delete correct item, we map over the full stash and check filter
+            let html = '';
+            appData.stash.forEach((item, originalIndex) => {
+                const info = getImageInfo(item);
+                if(currentStashFilter === 'All' || info.tag === currentStashFilter) {
+                    const url = loadedImages[info.vaultKey] || '';
+                    let displayTag = info.tag !== 'Untagged' ? `<div class="stash-tag-badge">${info.tag}</div>` : '';
+                    html += `
+                        <div class="stash-thumb-wrapper">
+                            <img src="${url}" class="stash-thumb" onclick="removeFromStash(${originalIndex})" title="Click to remove">
+                            ${displayTag}
+                        </div>`;
+                }
+            });
+            previewContainer.innerHTML = html;
         }
 
         function removeFromStash(index) {
@@ -546,16 +678,28 @@
             const schedContainer = document.getElementById('scheduled-container');
             const slots = Array.from(schedContainer.querySelectorAll('.slot'));
 
-            if (slots.length === 0 || appData.stash.length === 0) return alert("Check if you have slots and stash items!");
+            if (slots.length === 0) return alert("Check if you have slots!");
+
+            // Grab only items that match current filter
+            let itemsToSlot = [];
+            for (let i = appData.stash.length - 1; i >= 0; i--) {
+                const info = getImageInfo(appData.stash[i]);
+                if (currentStashFilter === 'All' || info.tag === currentStashFilter) {
+                    itemsToSlot.push(appData.stash.splice(i, 1)[0]);
+                }
+            }
+            itemsToSlot.reverse(); // Restore original order
+
+            if (itemsToSlot.length === 0) return alert("No stash items match your current tag filter!");
 
             let slotIndex = 0;
-            while (appData.stash.length > 0) {
-                const fileName = appData.stash.shift(); 
+            while (itemsToSlot.length > 0) {
+                const item = itemsToSlot.shift(); 
                 const targetSlot = slots[slotIndex];
-                const id = targetSlot.id.replace('slot-', '');
+                const id = targetSlot.id.replace('slot-', ''); // gives e.g. d1-sched-0
                 
                 if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
-                appData.slots[id].images.push(fileName);
+                appData.slots[id].images.push(item);
                 
                 slotIndex = (slotIndex + 1) % slots.length;
             }
@@ -569,34 +713,27 @@
             const data = appData.slots[id];
             if (!data) return;
 
-            // 1. Copy caption
             if (data.caption) {
                 try {
                     await navigator.clipboard.writeText(data.caption);
                 } catch (err) {
                     alert(`Caption copy failed:\n\n${err.message}`);
-                    console.error("Caption copy failed");
                 }
             }
 
-            // 2. Download sequentially with a hard pause and explicit error alerts
             if (data.images && data.images.length > 0) {
                 for (let i = 0; i < data.images.length; i++) {
-                    let fileName = data.images[i];
+                    const info = getImageInfo(data.images[i]);
                     try {
                         document.getElementById('cloudStatus').innerText = `DOWNLOADING PHOTO ${i + 1} OF ${data.images.length}...`;
                         
-                        // Always fetch fresh from network, bypassing cache
-                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}?t=${Date.now()}`, {
+                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}?t=${Date.now()}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
                             cache: 'no-store'
                         });
                         
                         if (response.ok) {
                             const blob = await response.blob();
-                            const originalName = fileName.replace(/^\d+_/, '');
-                            
-                            // Using FileReader Data URL to force the physical download 
                             const reader = new FileReader();
                             await new Promise((resolve, reject) => {
                                 reader.onloadend = () => {
@@ -604,44 +741,37 @@
                                         const a = document.createElement('a');
                                         a.style.display = 'none';
                                         a.href = reader.result;
-                                        a.download = originalName;
+                                        a.download = info.originalName;
                                         document.body.appendChild(a);
-                                        
                                         a.click();
-                                        
                                         document.body.removeChild(a);
                                         resolve();
                                     } catch (clickErr) {
-                                        alert(`Download step failed for ${originalName}:\n\n${clickErr.message}`);
+                                        alert(`Download step failed for ${info.originalName}:\n\n${clickErr.message}`);
                                         reject(clickErr);
                                     }
                                 };
-                                
                                 reader.onerror = () => {
-                                    alert(`Failed to convert image data for ${originalName}:\n\n${reader.error.message}`);
+                                    alert(`Failed to convert image data for ${info.originalName}:\n\n${reader.error.message}`);
                                     reject(reader.error);
                                 };
-                                
                                 reader.readAsDataURL(blob);
                             });
                             
-                            // HARD PAUSE: Wait 3.5 seconds before moving to the next photo
                             if (i < data.images.length - 1) {
                                 await new Promise(resolve => setTimeout(resolve, 3500));
                             }
                         } else {
                             const errorText = await response.text();
-                            alert(`Supabase refused the download for ${fileName}!\n\nStatus Code: ${response.status}\nError: ${errorText}`);
+                            alert(`Supabase refused the download for ${info.originalName}!\n\nStatus Code: ${response.status}\nError: ${errorText}`);
                         }
                     } catch (e) {
-                        alert(`Network or System Error on ${fileName}:\n\n${e.message}\n\nPlease check your internet connection and Supabase URL.`);
-                        console.error("Download failed for:", fileName, e);
+                        alert(`Network Error on ${info.originalName}:\n\n${e.message}\n\nPlease check your internet connection.`);
                     }
                 }
                 document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             }
-
-            alert("Sequence complete. If you didn't get any error pop-ups, the photos should be in your downloads folder! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+            alert("Caption copied & photos downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
@@ -650,7 +780,8 @@
 
             document.getElementById('cloudStatus').innerText = "ARCHIVING POSTED FILES...";
 
-            for (let fileName of data.images) {
+            for (let item of data.images) {
+                const info = getImageInfo(item);
                 try {
                     await fetch(`${dbConfig.url}/storage/v1/object/move`, {
                         method: 'POST',
@@ -661,12 +792,12 @@
                         },
                         body: JSON.stringify({
                             bucketId: 'vault',
-                            sourceKey: fileName,
-                            destinationKey: `posted/${fileName}`
+                            sourceKey: info.vaultKey,
+                            destinationKey: `posted/${info.vaultKey}`
                         })
                     });
                 } catch (err) {
-                    console.error("Failed to move file in cloud:", fileName);
+                    console.error("Failed to move file in cloud:", info.vaultKey);
                 }
             }
 
@@ -721,3 +852,4 @@
     </script>
 </body>
 </html>
+
