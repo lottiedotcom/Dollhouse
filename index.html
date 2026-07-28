@@ -254,15 +254,16 @@
             slots: {}
         };
 
+        // Fallback for older image states
         let loadedImages = {};
 
-        // Helper to normalize image records
+        // Helper to normalize image records & get thumbnails
         function getImageInfo(item) {
-            if (!item) return { vaultKey: '', originalName: '' };
+            if (!item) return { vaultKey: '', originalName: '', thumb: '' };
             if (typeof item === 'object' && item.vaultKey) {
                 let name = item.originalName || item.vaultKey;
                 name = name.replace(/^QUEUE_DUMP_[^_]*_?/, '');
-                return { vaultKey: item.vaultKey, originalName: name };
+                return { vaultKey: item.vaultKey, originalName: name, thumb: item.thumb || '' };
             }
             let vaultKey = item;
             let originalName = item;
@@ -272,7 +273,7 @@
                 originalName = item.replace(/^\d+_/, '');
             }
             originalName = originalName.replace(/^QUEUE_DUMP_[^_]*_?/, '');
-            return { vaultKey, originalName };
+            return { vaultKey, originalName, thumb: '' };
         }
 
         // --- SUPABASE CLOUD SYNC ---
@@ -312,7 +313,7 @@
                 document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
                 document.getElementById('appInterface').style.display = 'block';
                 
-                await preloadAllImages();
+                await preloadMissingThumbnails();
                 renderApp();
 
             } catch (err) {
@@ -349,6 +350,27 @@
             let originalName = file.name.replace(/^QUEUE_DUMP_[^_]*_?/, '');
             const vaultKey = `${Date.now()}___${originalName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
             
+            // Create a lightweight base64 thumbnail for instant UI loading
+            const thumbBase64 = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 150; // Keeps the string super small
+                        const scaleSize = MAX_WIDTH / img.width;
+                        canvas.width = MAX_WIDTH;
+                        canvas.height = img.height * scaleSize;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.6));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+            
+            // Push the massive file to the cloud silently
             await fetch(`${dbConfig.url}/storage/v1/object/vault/${vaultKey}`, {
                 method: 'POST',
                 headers: { 
@@ -359,13 +381,14 @@
                 body: file
             });
 
-            loadedImages[vaultKey] = URL.createObjectURL(file);
             document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             
-            return { vaultKey, originalName };
+            // Save the thumb directly to the state so we never have to fetch the blob again just to view it
+            return { vaultKey: vaultKey, originalName: originalName, thumb: thumbBase64 };
         }
 
-        async function preloadAllImages() {
+        // Backwards compatibility: Only download massive blobs for older photos that don't have built-in thumbnails
+        async function preloadMissingThumbnails() {
             let filesToFetch = [...appData.stash];
             Object.values(appData.slots).forEach(slot => {
                 if (slot.images) filesToFetch.push(...slot.images);
@@ -373,7 +396,7 @@
 
             for (let item of filesToFetch) {
                 const info = getImageInfo(item);
-                if (info.vaultKey && !loadedImages[info.vaultKey]) {
+                if (info.vaultKey && !info.thumb && !loadedImages[info.vaultKey]) {
                     try {
                         const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
@@ -383,7 +406,7 @@
                             loadedImages[info.vaultKey] = URL.createObjectURL(blob);
                         }
                     } catch (e) {
-                        console.error("Failed to load image:", info.vaultKey);
+                        console.error("Failed to load older image:", info.vaultKey);
                     }
                 }
             }
@@ -423,7 +446,7 @@
                     <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
                     
                     <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
-                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
+                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Copy Photos & Caption to Keyboard</button>
                         <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Auto-Archive)</button>
                         <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot</button>
                     </div>
@@ -443,7 +466,8 @@
             if (data.images && data.images.length > 0) {
                 gallery.innerHTML = data.images.map(item => {
                     const info = getImageInfo(item);
-                    const url = loadedImages[info.vaultKey] || '';
+                    // Use lightweight thumb if it exists, otherwise use fallback blob
+                    const url = info.thumb || loadedImages[info.vaultKey] || '';
                     return `<div class="gallery-item"><img src="${url}"></div>`;
                 }).join('');
                 gallery.style.display = 'flex';
@@ -529,7 +553,7 @@
 
             previewContainer.innerHTML = appData.stash.map((item, index) => {
                 const info = getImageInfo(item);
-                const url = loadedImages[info.vaultKey] || '';
+                const url = info.thumb || loadedImages[info.vaultKey] || '';
                 return `<img src="${url}" class="stash-thumb" onclick="removeFromStash(${index})" title="Click to remove">`;
             }).join('');
         }
@@ -562,30 +586,29 @@
             await saveToCloudImmediate();
         }
 
-        // --- PREP POST & CLEAN ORIGINAL DOWNLOAD ---
+        // --- PREP POST (CLIPBOARD ENGINE) ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
 
-            let fileNamesToSearch = [];
-            document.getElementById('cloudStatus').innerText = "PREPPING POST...";
+            let copiedCount = 0;
+            document.getElementById('cloudStatus').innerText = "COPYING TO KEYBOARD...";
 
-            // 1. Copy caption
             if (data.caption) {
                 try {
                     await navigator.clipboard.writeText(data.caption);
+                    await new Promise(resolve => setTimeout(resolve, 500)); 
                 } catch (err) {
                     console.error("Caption copy failed", err);
                 }
             }
 
-            // 2. Download via Data URL with exact clean original filename
             if (data.images && data.images.length > 0) {
                 for (let item of data.images) {
                     try {
                         const info = getImageInfo(item);
-                        fileNamesToSearch.push(info.originalName);
 
+                        // Only download the massive high-res file when you actually need to post it
                         const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
                         });
@@ -593,31 +616,57 @@
                         if (response.ok) {
                             const blob = await response.blob();
                             
-                            const reader = new FileReader();
-                            await new Promise((resolve) => {
-                                reader.onloadend = () => {
-                                    const a = document.createElement('a');
-                                    a.href = reader.result;
-                                    a.download = info.originalName;
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    resolve();
-                                };
-                                reader.readAsDataURL(blob);
-                            });
+                            const img = new Image();
+                            const url = window.URL.createObjectURL(blob);
                             
-                            // Slight pause so MacroDroid can catch each file separately
-                            await new Promise(resolve => setTimeout(resolve, 800));
+                            await new Promise((resolve, reject) => {
+                                img.onload = resolve;
+                                img.onerror = reject;
+                                img.src = url;
+                            });
+
+                            const canvas = document.createElement('canvas');
+                            
+                            // Safety Limit: Prevents mobile RAM from crashing when drawing massive raw photos
+                            const MAX_COPY_WIDTH = 2500; 
+                            let finalWidth = img.width;
+                            let finalHeight = img.height;
+                            
+                            if (finalWidth > MAX_COPY_WIDTH) {
+                                const ratio = MAX_COPY_WIDTH / finalWidth;
+                                finalWidth = MAX_COPY_WIDTH;
+                                finalHeight = img.height * ratio;
+                            }
+
+                            canvas.width = finalWidth;
+                            canvas.height = finalHeight;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, finalWidth, finalHeight);
+
+                            const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                            
+                            await navigator.clipboard.write([
+                                new ClipboardItem({
+                                    'image/png': pngBlob
+                                })
+                            ]);
+                            
+                            copiedCount++;
+                            window.URL.revokeObjectURL(url);
+                            
+                            await new Promise(resolve => setTimeout(resolve, 600)); 
                         }
                     } catch (e) {
-                        console.error("Download failed for:", item, e);
+                        console.error("Clipboard copy failed for:", item, e);
                     }
                 }
+                
+                document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
+                alert(`Caption and ${copiedCount} photo(s) copied to your keyboard clipboard! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
+            } else if (data.caption) {
+                document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
+                alert("Caption copied to your keyboard! (No photos in this slot)");
             }
-
-            document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
-            alert("Caption copied & photos sent to MacroDroid! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧\n\nMacroDroid is moving:\n" + fileNamesToSearch.join("\n"));
         }
 
         async function markAsPosted(id) {
@@ -698,3 +747,4 @@
     </script>
 </body>
 </html>
+
