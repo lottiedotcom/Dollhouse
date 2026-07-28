@@ -251,14 +251,14 @@
 
         let loadedImages = {};
 
-        // Helper to guarantee the EXACT original string is returned untouched
+        // Helper to normalize image records
         function getImageInfo(item) {
             if (!item) return { vaultKey: '', originalName: '' };
             if (typeof item === 'object' && item.vaultKey) {
-                // Return exactly what was saved without altering it
-                return { vaultKey: item.vaultKey, originalName: item.originalName || item.vaultKey };
+                let name = item.originalName || item.vaultKey;
+                name = name.replace(/^QUEUE_DUMP_[^_]*_?/, '');
+                return { vaultKey: item.vaultKey, originalName: name };
             }
-            // Fallback for old data records
             let vaultKey = item;
             let originalName = item;
             if (item.includes('___')) {
@@ -266,6 +266,7 @@
             } else {
                 originalName = item.replace(/^\d+_/, '');
             }
+            originalName = originalName.replace(/^QUEUE_DUMP_[^_]*_?/, '');
             return { vaultKey, originalName };
         }
 
@@ -340,11 +341,8 @@
         async function uploadFileToVault(file) {
             document.getElementById('cloudStatus').innerText = "UPLOADING HIGH-RES FILE...";
             
-            // Store the EXACT original filename string for MacroDroid
-            const exactOriginalName = file.name;
-            
-            // Create a safe Vault key so Supabase doesn't error out on special characters
-            const vaultKey = `${Date.now()}___${exactOriginalName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+            let originalName = file.name.replace(/^QUEUE_DUMP_[^_]*_?/, '');
+            const vaultKey = `${Date.now()}___${originalName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
             
             await fetch(`${dbConfig.url}/storage/v1/object/vault/${vaultKey}`, {
                 method: 'POST',
@@ -359,8 +357,7 @@
             loadedImages[vaultKey] = URL.createObjectURL(file);
             document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             
-            // Save BOTH so we can download with the exact original string later
-            return { vaultKey: vaultKey, originalName: exactOriginalName };
+            return { vaultKey, originalName };
         }
 
         async function preloadAllImages() {
@@ -546,7 +543,7 @@
             await saveToCloudImmediate();
         }
 
-        // --- PREP POST & TRIGGER MACRODROID ---
+        // --- PREP POST & CLEAN ORIGINAL DOWNLOAD ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
@@ -562,34 +559,34 @@
                 }
             }
 
-            // 2. Download using a Data URL stream to bypass Android's Blob URL block
+            // 2. Download securely using Blob URLs
             if (data.images && data.images.length > 0) {
                 for (let item of data.images) {
                     try {
                         const info = getImageInfo(item);
                         fileNamesToSearch.push(info.originalName);
 
-                        // Fetching via the public URL completely removes Authorization header blocks on download
-                        const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/${info.vaultKey}`);
+                        // Authenticated fetch directly from the secure vault
+                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
+                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
+                        });
                         
                         if (response.ok) {
                             const blob = await response.blob();
                             
-                            // Reverting to the FileReader (Data URL) engine that successfully downloaded to your device before
-                            const reader = new FileReader();
-                            await new Promise((resolve) => {
-                                reader.onloadend = () => {
-                                    const a = document.createElement('a');
-                                    a.href = reader.result;
-                                    // This guarantees the download matches the exact filename without numbers
-                                    a.download = info.originalName; 
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    resolve();
-                                };
-                                reader.readAsDataURL(blob);
-                            });
+                            // Use Blob URL instead of Data URL (fixes mobile crash and access denied)
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.style.display = 'none';
+                            a.href = url;
+                            a.download = info.originalName;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            
+                            setTimeout(() => window.URL.revokeObjectURL(url), 2000);
+                        } else {
+                            console.error("Failed to fetch image. Status:", response.status);
                         }
                     } catch (e) {
                         console.error("Download failed for:", item, e);
