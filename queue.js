@@ -3,7 +3,6 @@ let currentDay = 1;
 let currentStashFilter = 'All';
 let pendingFilesToUpload = [];
 let currentStashActionIndex = null;
-let reminderInterval;
 
 let appData = {
     schedule: ['09:00', '13:00', '18:00', '22:00'],
@@ -60,7 +59,6 @@ async function initQueue() {
         
         await preloadAllImages();
         renderApp();
-        startReminderChecker();
     } catch (err) {
         console.error("Queue Sync Error:", err);
     }
@@ -83,6 +81,33 @@ function saveQueueToCloud() {
             document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
         }
     }, 1000);
+}
+
+// NEW: Manual Save Drafts function
+function forceSaveDrafts() {
+    if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
+        document.activeElement.blur(); 
+    }
+    
+    document.getElementById('cloudStatus').innerText = "SAVING DRAFTS...";
+    clearTimeout(queueSyncTimeout); // Cancel any pending auto-saves
+    
+    const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+    fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
+        method: 'POST',
+        headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
+        body: blob
+    }).then(res => {
+        if(res.ok) {
+            document.getElementById('cloudStatus').innerText = "(★) DRAFTS SAVED TO VAULT";
+            alert("All photos and captions for all 3 days are securely saved to your Vault drafts!");
+        } else {
+            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
+            alert("Failed to save. Check connection.");
+        }
+    }).catch(err => {
+        document.getElementById('cloudStatus').innerText = "SAVE ERROR.";
+    });
 }
 
 // RAW ARRAY BUFFER UPLOAD
@@ -172,13 +197,14 @@ function renderApp() {
     updateCounters();
 }
 
+// Fixed Textarea: Switched from "oninput" to "onblur" so it only saves when you stop typing
 function createSlotHTML(id, title) {
     return `
         <div class="slot" id="slot-${id}">
             <div class="slot-title">${title}</div>
             <input type="file" multiple accept="image/*,image/gif" onchange="uploadDirectToSlot(event, '${id}')">
             <div class="slot-gallery" id="gallery-${id}" style="display: none;"></div>
-            <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
+            <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here..." onblur="updateCaption('${id}', this.value)"></textarea>
             <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
                 <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
                 <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Delete from DB)</button>
@@ -221,7 +247,6 @@ function formatTime(time24h) {
     return `${hours}:${minutes} ${ampm}`;
 }
 
-// STRICT 1-by-1 Upload with Visual Progress Bar
 async function uploadDirectToSlot(event, id) {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
@@ -260,7 +285,6 @@ function updateCaption(id, text) {
     if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
     appData.slots[id].caption = text;
     saveQueueToCloud();
-    hydrateSlotUI(id);
 }
 
 function clearSlot(id) {
@@ -307,7 +331,6 @@ function previewSelectedFiles(event) {
     document.getElementById('uploadStatusText').innerText = `${pendingFilesToUpload.length} file(s) selected (${totalMB.toFixed(1)}MB total) ready to upload.`;
 }
 
-// Upload to Stash with Progress Bar
 async function uploadAndSaveTag() {
     if (pendingFilesToUpload.length === 0) return alert("Please click '+ Select Photos' first!");
     
@@ -388,7 +411,6 @@ function renderStash() {
         if(currentStashFilter === 'All' || info.tag === currentStashFilter) {
             const url = loadedImages[info.vaultKey] || '';
             let displayTag = info.tag !== 'Untagged' ? `<div class="stash-tag-badge">${info.tag}</div>` : '';
-            // New Modal click trigger instead of instant delete
             html += `
                 <div class="stash-thumb-wrapper">
                     <img src="${url}" class="stash-thumb" onclick="openStashActionModal(${originalIndex})" title="Click for options">
@@ -404,7 +426,6 @@ function renderStash() {
     }
 }
 
-// --- NEW STASH PICKER MODAL ---
 function openStashActionModal(index) {
     currentStashActionIndex = index;
     document.getElementById('modalDayDisplay').innerText = currentDay;
@@ -412,7 +433,6 @@ function openStashActionModal(index) {
     const container = document.getElementById('stashActionSlotButtons');
     container.innerHTML = '';
     
-    // Generate dynamic buttons for the current day's slots
     appData.schedule.forEach((time, i) => {
         const btn = document.createElement('button');
         btn.className = 'btn-style';
@@ -591,7 +611,6 @@ async function markAsPosted(id) {
     setTimeout(() => alert("Deleted entirely from Vault & cleared slot (★^O^★)"), 100);
 }
 
-// --- SETTINGS & REMINDERS ---
 function openSettings() {
     const container = document.getElementById('scheduleInputsContainer');
     container.innerHTML = '';
@@ -603,10 +622,6 @@ function openSettings() {
             </div>
         `;
     });
-    
-    const savedReminder = localStorage.getItem('queueReminderTime') || '';
-    document.getElementById('reminderTimeInput').value = savedReminder;
-
     document.getElementById('settingsModal').style.display = 'flex';
 }
 
@@ -626,55 +641,8 @@ function saveAndCloseSettings() {
     let newTimes = [];
     inputs.forEach(input => { if(input.value) newTimes.push(input.value); });
     appData.schedule = newTimes;
-    
-    // Save Reminder Time
-    const reminderTime = document.getElementById('reminderTimeInput').value;
-    localStorage.setItem('queueReminderTime', reminderTime);
-    startReminderChecker();
-
     document.getElementById('settingsModal').style.display = 'none';
     renderApp();
     saveQueueToCloud();
-}
-
-// NOTIFICATION CHECKER
-function startReminderChecker() {
-    if(reminderInterval) clearInterval(reminderInterval);
-    const reminderTime = localStorage.getItem('queueReminderTime');
-    if(!reminderTime) return;
-
-    reminderInterval = setInterval(() => {
-        const now = new Date();
-        const h = now.getHours().toString().padStart(2, '0');
-        const m = now.getMinutes().toString().padStart(2, '0');
-        const currentTime = `${h}:${m}`;
-        
-        const lastNotified = localStorage.getItem('lastNotifiedDate');
-        const today = now.toDateString();
-
-        if(currentTime === reminderTime && lastNotified !== today) {
-            playBeepSound();
-            if(Notification.permission === "granted") {
-                new Notification("(★) Queue Manager", { body: "Time to schedule your posts for 3 days out!" });
-            } else {
-                alert("(★) Time to schedule your posts for 3 days out!");
-            }
-            localStorage.setItem('lastNotifiedDate', today);
-        }
-    }, 60000); // Checks the clock every 60 seconds
-}
-
-function playBeepSound() {
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        osc.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.3); // Quick 0.3s notification chime
-    } catch(e) {
-        console.error("Audio block on mobile:", e);
-    }
 }
 
