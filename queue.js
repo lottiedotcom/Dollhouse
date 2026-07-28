@@ -2,6 +2,8 @@ let queueSyncTimeout;
 let currentDay = 1;
 let currentStashFilter = 'All';
 let pendingFilesToUpload = [];
+let currentStashActionIndex = null;
+let reminderInterval;
 
 let appData = {
     schedule: ['09:00', '13:00', '18:00', '22:00'],
@@ -58,6 +60,7 @@ async function initQueue() {
         
         await preloadAllImages();
         renderApp();
+        startReminderChecker();
     } catch (err) {
         console.error("Queue Sync Error:", err);
     }
@@ -82,16 +85,22 @@ function saveQueueToCloud() {
     }, 1000);
 }
 
+// RAW ARRAY BUFFER UPLOAD
 async function uploadFileToVault(file) {
     const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
     const fileName = `${Date.now()}_${cleanName}`;
     
+    const arrayBuffer = await file.arrayBuffer();
     await new Promise(r => setTimeout(r, 50));
 
     const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
         method: 'POST',
-        headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': file.type || 'image/jpeg' },
-        body: file
+        headers: { 
+            'apikey': dbConfig.key, 
+            'Authorization': `Bearer ${dbConfig.key}`, 
+            'Content-Type': file.type || 'image/jpeg' 
+        },
+        body: arrayBuffer
     });
 
     if (!res.ok) {
@@ -212,17 +221,24 @@ function formatTime(time24h) {
     return `${hours}:${minutes} ${ampm}`;
 }
 
-// STRICT 1-by-1 Sequential Upload
+// STRICT 1-by-1 Upload with Visual Progress Bar
 async function uploadDirectToSlot(event, id) {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
     if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
     
     const statusEl = document.getElementById('cloudStatus');
+    const pContainer = document.getElementById('globalProgressContainer');
+    const pBar = document.getElementById('globalProgressBar');
+    
+    pContainer.style.display = 'block';
+    pBar.style.width = '0%';
     
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         statusEl.innerText = `UPLOADING ${i + 1} OF ${files.length}...`;
+        pBar.style.width = `${((i) / files.length) * 100}%`;
+        
         try {
             const fileName = await uploadFileToVault(file);
             appData.slots[id].images.push({ vaultKey: fileName, originalName: file.name, tag: 'Direct' });
@@ -231,10 +247,13 @@ async function uploadDirectToSlot(event, id) {
         }
     }
 
+    pBar.style.width = '100%';
     statusEl.innerText = "(★) UPLOAD COMPLETE";
     hydrateSlotUI(id);
     saveQueueToCloud();
     event.target.value = ""; 
+    
+    setTimeout(() => { pContainer.style.display = 'none'; }, 1000);
 }
 
 function updateCaption(id, text) {
@@ -288,26 +307,31 @@ function previewSelectedFiles(event) {
     document.getElementById('uploadStatusText').innerText = `${pendingFilesToUpload.length} file(s) selected (${totalMB.toFixed(1)}MB total) ready to upload.`;
 }
 
-// STRICT 1-by-1 Sequential Stash Upload with Smart Tag Reading
+// Upload to Stash with Progress Bar
 async function uploadAndSaveTag() {
-    if (pendingFilesToUpload.length === 0) return alert("Please click '+ Select Photos / GIFs' first!");
+    if (pendingFilesToUpload.length === 0) return alert("Please click '+ Select Photos' first!");
     
-    // Check text input first. If empty, check dropdown select.
     let tagInput = document.getElementById('newUploadTagInput').value.trim();
     if (!tagInput) {
         tagInput = document.getElementById('uploadTagSelect').value;
     }
-
     if (!tagInput) return alert("Please select an existing tag from the dropdown or type a new one!");
 
     if (!appData.savedTags) appData.savedTags = [];
     if (!appData.savedTags.includes(tagInput)) appData.savedTags.push(tagInput);
 
     const statusEl = document.getElementById('uploadStatusText');
+    const pContainer = document.getElementById('globalProgressContainer');
+    const pBar = document.getElementById('globalProgressBar');
+    
+    pContainer.style.display = 'block';
+    pBar.style.width = '0%';
     let successCount = 0;
 
     for (let i = 0; i < pendingFilesToUpload.length; i++) {
         const file = pendingFilesToUpload[i];
+        pBar.style.width = `${((i) / pendingFilesToUpload.length) * 100}%`;
+        
         const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
         statusEl.innerText = `Uploading ${i + 1} of ${pendingFilesToUpload.length}: ${file.name} (${sizeMB}MB)...`;
         
@@ -320,10 +344,13 @@ async function uploadAndSaveTag() {
         }
     }
 
+    pBar.style.width = '100%';
     pendingFilesToUpload = [];
     document.getElementById('stashFileSelect').value = "";
-    document.getElementById('newUploadTagInput').value = ""; // Clear text box after success
+    document.getElementById('newUploadTagInput').value = "";
     statusEl.innerText = `(★) Uploaded ${successCount} file(s) & saved to tag: ${tagInput}`;
+    
+    setTimeout(() => { pContainer.style.display = 'none'; }, 1000);
     
     currentStashFilter = tagInput; 
     renderStash();
@@ -338,11 +365,9 @@ function renderStash() {
     
     if (!appData.savedTags) appData.savedTags = [];
 
-    // Collect all unique tags
     const allTags = new Set([...appData.savedTags]);
     appData.stash.forEach(item => allTags.add(getImageInfo(item).tag));
     
-    // 1. Fill the Filter Dropdown
     let filterOptions = `<option value="All">View All Tags (${appData.stash.length})</option>`;
     allTags.forEach(tag => {
         const count = appData.stash.filter(i => getImageInfo(i).tag === tag).length;
@@ -351,23 +376,22 @@ function renderStash() {
     });
     filterDropdown.innerHTML = filterOptions;
 
-    // 2. Fill the Upload Tag Selector Dropdown
     let uploadOptions = `<option value="">-- Choose Existing Tag --</option>`;
     allTags.forEach(tag => {
         uploadOptions += `<option value="${tag}">${tag}</option>`;
     });
     uploadTagSelect.innerHTML = uploadOptions;
 
-    // Render Images
     let html = '';
     appData.stash.forEach((item, originalIndex) => {
         const info = getImageInfo(item);
         if(currentStashFilter === 'All' || info.tag === currentStashFilter) {
             const url = loadedImages[info.vaultKey] || '';
             let displayTag = info.tag !== 'Untagged' ? `<div class="stash-tag-badge">${info.tag}</div>` : '';
+            // New Modal click trigger instead of instant delete
             html += `
                 <div class="stash-thumb-wrapper">
-                    <img src="${url}" class="stash-thumb" onclick="removeFromStash(${originalIndex})" title="Click to remove">
+                    <img src="${url}" class="stash-thumb" onclick="openStashActionModal(${originalIndex})" title="Click for options">
                     ${displayTag}
                 </div>`;
         }
@@ -380,10 +404,70 @@ function renderStash() {
     }
 }
 
-function removeFromStash(index) {
-    appData.stash.splice(index, 1);
-    renderStash();
+// --- NEW STASH PICKER MODAL ---
+function openStashActionModal(index) {
+    currentStashActionIndex = index;
+    document.getElementById('modalDayDisplay').innerText = currentDay;
+    
+    const container = document.getElementById('stashActionSlotButtons');
+    container.innerHTML = '';
+    
+    // Generate dynamic buttons for the current day's slots
+    appData.schedule.forEach((time, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-style';
+        btn.style.width = '100%';
+        btn.style.marginBottom = '8px';
+        btn.style.background = '#e6f2ff';
+        btn.innerText = `Move to Post ${i + 1} (${formatTime(time)})`;
+        btn.onclick = () => executeStashMove(i);
+        container.appendChild(btn);
+    });
+
+    document.getElementById('stashActionModal').style.display = 'flex';
+}
+
+function closeStashActionModal() {
+    document.getElementById('stashActionModal').style.display = 'none';
+    currentStashActionIndex = null;
+}
+
+function executeStashMove(slotIndex) {
+    if(currentStashActionIndex === null) return;
+    
+    const item = appData.stash.splice(currentStashActionIndex, 1)[0];
+    const slotId = `d${currentDay}-sched-${slotIndex}`;
+    
+    if (!appData.slots[slotId]) appData.slots[slotId] = { caption: "", images: [] };
+    appData.slots[slotId].images.push(item);
+    
+    renderApp();
     saveQueueToCloud();
+    closeStashActionModal();
+}
+
+async function executeStashDelete() {
+    if(currentStashActionIndex === null) return;
+    if(!confirm("Permanently delete this photo from your Vault Database?")) return;
+    
+    const item = appData.stash[currentStashActionIndex];
+    const info = getImageInfo(item);
+    
+    document.getElementById('cloudStatus').innerText = "DELETING FROM VAULT...";
+    try {
+        await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
+            method: 'DELETE',
+            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
+        });
+    } catch(e) {
+        console.error("Failed to delete file from DB:", info.vaultKey);
+    }
+    
+    appData.stash.splice(currentStashActionIndex, 1);
+    renderApp();
+    saveQueueToCloud();
+    closeStashActionModal();
+    document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
 }
 
 function autoFillDayCustom() {
@@ -507,6 +591,7 @@ async function markAsPosted(id) {
     setTimeout(() => alert("Deleted entirely from Vault & cleared slot (★^O^★)"), 100);
 }
 
+// --- SETTINGS & REMINDERS ---
 function openSettings() {
     const container = document.getElementById('scheduleInputsContainer');
     container.innerHTML = '';
@@ -518,6 +603,10 @@ function openSettings() {
             </div>
         `;
     });
+    
+    const savedReminder = localStorage.getItem('queueReminderTime') || '';
+    document.getElementById('reminderTimeInput').value = savedReminder;
+
     document.getElementById('settingsModal').style.display = 'flex';
 }
 
@@ -537,8 +626,55 @@ function saveAndCloseSettings() {
     let newTimes = [];
     inputs.forEach(input => { if(input.value) newTimes.push(input.value); });
     appData.schedule = newTimes;
+    
+    // Save Reminder Time
+    const reminderTime = document.getElementById('reminderTimeInput').value;
+    localStorage.setItem('queueReminderTime', reminderTime);
+    startReminderChecker();
+
     document.getElementById('settingsModal').style.display = 'none';
     renderApp();
     saveQueueToCloud();
+}
+
+// NOTIFICATION CHECKER
+function startReminderChecker() {
+    if(reminderInterval) clearInterval(reminderInterval);
+    const reminderTime = localStorage.getItem('queueReminderTime');
+    if(!reminderTime) return;
+
+    reminderInterval = setInterval(() => {
+        const now = new Date();
+        const h = now.getHours().toString().padStart(2, '0');
+        const m = now.getMinutes().toString().padStart(2, '0');
+        const currentTime = `${h}:${m}`;
+        
+        const lastNotified = localStorage.getItem('lastNotifiedDate');
+        const today = now.toDateString();
+
+        if(currentTime === reminderTime && lastNotified !== today) {
+            playBeepSound();
+            if(Notification.permission === "granted") {
+                new Notification("(★) Queue Manager", { body: "Time to schedule your posts for 3 days out!" });
+            } else {
+                alert("(★) Time to schedule your posts for 3 days out!");
+            }
+            localStorage.setItem('lastNotifiedDate', today);
+        }
+    }, 60000); // Checks the clock every 60 seconds
+}
+
+function playBeepSound() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3); // Quick 0.3s notification chime
+    } catch(e) {
+        console.error("Audio block on mobile:", e);
+    }
 }
 
