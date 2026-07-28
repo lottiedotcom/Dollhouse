@@ -241,7 +241,9 @@
     <script>
         // Service Worker Registration
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
+            navigator.serviceWorker.register('sw.js').then(() => {
+                console.log("Service Worker Registered");
+            });
         }
 
         // Supabase Vault Credentials
@@ -301,8 +303,10 @@
         async function fetchCloudData() {
             document.getElementById('cloudStatus').innerText = "SYNCING WITH VAULT...";
             try {
-                const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/state.json`, {
-                    headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
+                // Ensure we bypass cache when syncing the main JSON file
+                const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/state.json?t=${Date.now()}`, {
+                    headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
+                    cache: 'no-store'
                 });
                 
                 if (response.ok) {
@@ -560,7 +564,7 @@
             saveToCloud();
         }
 
-        // --- PREP POST & ORIGINAL NAME DOWNLOAD (STRICTLY ONE BY ONE) ---
+        // --- PREP POST & SEQUENTIAL FILE DOWNLOAD ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
@@ -574,40 +578,45 @@
                 }
             }
 
-            // 2. Download completely securely, spaced out by 2.5 seconds so Chrome doesn't panic
+            // 2. Download sequentially with a hard pause
             if (data.images && data.images.length > 0) {
                 for (let i = 0; i < data.images.length; i++) {
                     let fileName = data.images[i];
                     try {
-                        // Update status text so you know it's actually working and not frozen
                         document.getElementById('cloudStatus').innerText = `DOWNLOADING PHOTO ${i + 1} OF ${data.images.length}...`;
                         
-                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
-                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
+                        // Always fetch fresh from network, bypassing cache
+                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}?t=${Date.now()}`, {
+                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
+                            cache: 'no-store'
                         });
                         
                         if (response.ok) {
                             const blob = await response.blob();
                             const originalName = fileName.replace(/^\d+_/, '');
                             
-                            // Create standard object URL
-                            const url = window.URL.createObjectURL(blob);
+                            // Using FileReader Data URL to force the physical download 
+                            const reader = new FileReader();
+                            await new Promise((resolve) => {
+                                reader.onloadend = () => {
+                                    const a = document.createElement('a');
+                                    a.style.display = 'none';
+                                    a.href = reader.result;
+                                    a.download = originalName;
+                                    document.body.appendChild(a);
+                                    
+                                    a.click();
+                                    
+                                    document.body.removeChild(a);
+                                    resolve();
+                                };
+                                reader.readAsDataURL(blob);
+                            });
                             
-                            const a = document.createElement('a');
-                            a.style.display = 'none';
-                            a.href = url;
-                            a.download = originalName;
-                            document.body.appendChild(a);
-                            
-                            // Trigger the physical download
-                            a.click();
-                            
-                            document.body.removeChild(a);
-                            
-                            // HARD PAUSE: Wait 2.5 full seconds before the loop moves to the next photo
-                            // This guarantees Android processes the first download completely.
+                            // HARD PAUSE: Wait 3.5 seconds before moving to the next photo
+                            // This ensures Android fully processes the download file before starting the next
                             if (i < data.images.length - 1) {
-                                await new Promise(resolve => setTimeout(resolve, 2500));
+                                await new Promise(resolve => setTimeout(resolve, 3500));
                             }
                         }
                     } catch (e) {
@@ -617,7 +626,7 @@
                 document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             }
 
-            alert("Caption copied & photos downloaded! (Check your notifications/recents) (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+            alert("Caption copied & photos downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
