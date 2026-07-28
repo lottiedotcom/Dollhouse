@@ -97,7 +97,16 @@
 
         #cloudStatus {
             text-align: center; font-size: 11px; color: var(--dark-blue);
-            font-weight: bold; margin-bottom: 15px; text-transform: uppercase;
+            font-weight: bold; margin-bottom: 10px; text-transform: uppercase;
+        }
+
+        #globalProgressContainer {
+            display: none; max-width: 900px; margin: 0 auto 15px auto;
+            background: #f0f8ff; border: 2px solid var(--baby-blue); border-radius: 5px;
+            height: 15px; overflow: hidden;
+        }
+        #globalProgressBar {
+            width: 0%; height: 100%; background: var(--hot-pink); transition: width 0.3s;
         }
 
         .stash-drawer {
@@ -220,6 +229,7 @@
 </head>
 <body>
 
+    <!-- Setup Modal -->
     <div id="dbModal" class="modal-overlay">
         <div class="modal-content">
             <h2>(★) Vault Setup (★)</h2>
@@ -230,18 +240,44 @@
         </div>
     </div>
 
+    <!-- Settings Modal -->
     <div class="modal-overlay" id="settingsModal">
         <div class="modal-content">
             <h2>Your Schedule</h2>
             <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Build your exact daily routine below.</p>
             <div id="scheduleInputsContainer"></div>
             <button class="btn-style" style="width: 100%; margin: 15px 0; background: var(--baby-pink);" onclick="addTimeInput()">+ Add Time</button>
+            
+            <hr style="border: 1px dashed #ccc; margin: 15px 0;">
+            <h3 style="margin-top:0;">(★) Daily Reminder</h3>
+            <p style="font-size: 11px; color:#666;">Play a sound & notify me to schedule 3 days out:</p>
+            <div style="display:flex; gap:10px; justify-content:center; align-items:center; margin-bottom:15px;">
+                <input type="time" id="reminderTimeInput" class="input-field" style="margin:0; width:120px;">
+                <button class="btn-style" onclick="requestNotificationPermission()" style="font-size:10px;">Enable Alerts</button>
+            </div>
+
             <button class="btn-style" style="width: 100%;" onclick="saveAndCloseSettings()">Save & Close</button>
+            
             <hr style="border: 1px dashed #ccc; margin: 20px 0;">
             <button class="btn-style" style="width: 100%; background: #ff9999; color: white; border-color: #cc0000;" onclick="resetCredentials()">(★) Disconnect / Reset Vault</button>
         </div>
     </div>
 
+    <!-- Stash Action Modal -->
+    <div id="stashActionModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-top:0; color:var(--dark-blue);">(★) Photo Options</h3>
+            <p style="font-size: 12px; color: #666; margin-bottom: 15px;">Move this photo to a slot on Day <span id="modalDayDisplay"></span>, or delete it forever.</p>
+            
+            <div id="stashActionSlotButtons"></div>
+            
+            <hr style="border: 1px dashed #ccc; margin: 15px 0;">
+            <button class="btn-style" style="width: 100%; background:#ff9999; color:white; border-color:#cc0000;" onclick="executeStashDelete()">( ✖ _ ✖ ) Delete from Vault</button>
+            <button class="btn-style" style="width: 100%; margin-top:10px; background:#fff;" onclick="closeStashActionModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Main UI -->
     <div class="header">
         <div class="header-top">
             <h1>(★) Manager</h1>
@@ -258,6 +294,11 @@
     </div>
 
     <div id="cloudStatus">Checking connection...</div>
+    
+    <!-- Progress Bar -->
+    <div id="globalProgressContainer">
+        <div id="globalProgressBar"></div>
+    </div>
 
     <div id="tab-queue" style="display: none;">
         
@@ -266,7 +307,6 @@
                 <span>(★) Content Stash</span>
             </div>
             
-            <!-- STASH VIEW FILTER -->
             <div style="margin-bottom: 10px;">
                 <select id="stashFilter" class="input-field" style="margin-bottom:0;" onchange="updateStashFilter()">
                     <option value="All">View All Tags</option>
@@ -279,7 +319,6 @@
                 <span style="font-size: 12px; color: #aaa;">Dump photos or GIFs here to use later...</span>
             </div>
             
-            <!-- NEW TAGGING DASHBOARD -->
             <div class="upload-dashboard">
                 <div style="font-size: 13px; color: var(--hot-pink); margin-bottom: 8px; font-weight: bold; text-align: center;">Tag Your Uploads:</div>
                 <select id="uploadTagSelect" class="input-field" style="margin-bottom: 8px;">
@@ -332,6 +371,7 @@
         </div>
     </div>
 
+    <!-- TAB 2: KAOMOJI -->
     <div id="tab-kaomoji" style="display: none;">
         <div class="kaomoji-form">
             <h2 style="margin-top: 0;">Add New Combo</h2>
@@ -351,10 +391,9 @@
     </div>
 
     <script>
-        // Updated Service Worker Registration to force fresh pull
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').then(reg => {
-                res.update(); // Forces browser to pull newest sw.js
+                reg.update(); 
             });
         }
 
@@ -400,6 +439,17 @@
             document.getElementById('btn-tab-kaomoji').className = tab === 'kaomoji' ? 'tab-btn active' : 'tab-btn';
 
             document.getElementById('headerCounters').style.display = tab === 'queue' ? 'block' : 'none';
+        }
+
+        // Notification Permission Request
+        function requestNotificationPermission() {
+            if ("Notification" in window) {
+                Notification.requestPermission().then(permission => {
+                    if(permission === "granted") alert("Notifications enabled! Keep this tab open/backgrounded to hear the alarm.");
+                });
+            } else {
+                alert("Your browser doesn't support notifications.");
+            }
         }
 
         window.onload = init;
