@@ -192,7 +192,7 @@
 
     <div class="header">
         <h1>(★) Queue Manager</h1>
-        <button class="btn-style" onclick="openSettings()">(★) Schedule</button>
+        <button class="btn-style" onclick="openSettings()">[*⚙] Schedule</button>
     </div>
 
     <div id="cloudStatus">Checking connection...</div>
@@ -231,11 +231,6 @@
                 <button class="btn-style" style="width: 100%; margin-top: 15px;" onclick="addRandomSlot()">+ Add Random Slot</button>
             </div>
         </div>
-
-        <!-- Clear All Button -->
-        <div style="text-align: center; margin-top: 30px;">
-            <button class="btn-style clear" style="width: 100%; max-width: 400px; padding: 15px; background: #fff; border: 3px outset #ccc; color: #cc0000; font-weight: bold;" onclick="clearAllSlots()">( ✖ _ ✖ ) Clear All Slots</button>
-        </div>
     </div>
 
     <script>
@@ -246,6 +241,7 @@
 
         // Supabase Vault Credentials
         let dbConfig = { url: '', key: '' };
+        let syncTimeout;
         
         let appData = {
             schedule: ['09:00', '13:00', '18:00', '22:00'],
@@ -255,25 +251,6 @@
         };
 
         let loadedImages = {};
-
-        // Helper to normalize image records
-        function getImageInfo(item) {
-            if (!item) return { vaultKey: '', originalName: '' };
-            if (typeof item === 'object' && item.vaultKey) {
-                let name = item.originalName || item.vaultKey;
-                name = name.replace(/^QUEUE_DUMP_[^_]*_?/, '');
-                return { vaultKey: item.vaultKey, originalName: name };
-            }
-            let vaultKey = item;
-            let originalName = item;
-            if (item.includes('___')) {
-                originalName = item.split('___').slice(1).join('___');
-            } else {
-                originalName = item.replace(/^\d+_/, '');
-            }
-            originalName = originalName.replace(/^QUEUE_DUMP_[^_]*_?/, '');
-            return { vaultKey, originalName };
-        }
 
         // --- SUPABASE CLOUD SYNC ---
         function init() {
@@ -322,34 +299,35 @@
             }
         }
 
-        async function saveToCloudImmediate() {
+        function saveToCloud() {
             document.getElementById('cloudStatus').innerText = "SAVING TO VAULT...";
-            try {
-                const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
-                await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
-                    method: 'POST',
-                    headers: { 
-                        'apikey': dbConfig.key, 
-                        'Authorization': `Bearer ${dbConfig.key}`,
-                        'Content-Type': 'application/json',
-                        'x-upsert': 'true'
-                    },
-                    body: blob
-                });
-                document.getElementById('cloudStatus').innerText = "(★) ALL CHANGES SAVED";
-            } catch (err) {
-                document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
-            }
+            clearTimeout(syncTimeout);
+            syncTimeout = setTimeout(async () => {
+                try {
+                    const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+                    await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
+                        method: 'POST',
+                        headers: { 
+                            'apikey': dbConfig.key, 
+                            'Authorization': `Bearer ${dbConfig.key}`,
+                            'Content-Type': 'application/json',
+                            'x-upsert': 'true'
+                        },
+                        body: blob
+                    });
+                    document.getElementById('cloudStatus').innerText = "(★) ALL CHANGES SAVED";
+                } catch (err) {
+                    document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
+                }
+            }, 1000);
         }
 
         // --- RAW FILE HANDLING ---
         async function uploadFileToVault(file) {
             document.getElementById('cloudStatus').innerText = "UPLOADING HIGH-RES FILE...";
+            const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
             
-            let originalName = file.name.replace(/^QUEUE_DUMP_[^_]*_?/, '');
-            const vaultKey = `${Date.now()}___${originalName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-            
-            await fetch(`${dbConfig.url}/storage/v1/object/vault/${vaultKey}`, {
+            await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
                 method: 'POST',
                 headers: { 
                     'apikey': dbConfig.key, 
@@ -359,10 +337,9 @@
                 body: file
             });
 
-            loadedImages[vaultKey] = URL.createObjectURL(file);
+            loadedImages[fileName] = URL.createObjectURL(file);
             document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
-            
-            return { vaultKey, originalName };
+            return fileName;
         }
 
         async function preloadAllImages() {
@@ -371,19 +348,18 @@
                 if (slot.images) filesToFetch.push(...slot.images);
             });
 
-            for (let item of filesToFetch) {
-                const info = getImageInfo(item);
-                if (info.vaultKey && !loadedImages[info.vaultKey]) {
+            for (let fileName of filesToFetch) {
+                if (!loadedImages[fileName]) {
                     try {
-                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
+                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
                         });
                         if (response.ok) {
                             const blob = await response.blob();
-                            loadedImages[info.vaultKey] = URL.createObjectURL(blob);
+                            loadedImages[fileName] = URL.createObjectURL(blob);
                         }
                     } catch (e) {
-                        console.error("Failed to load image:", info.vaultKey);
+                        console.error("Failed to load image:", fileName);
                     }
                 }
             }
@@ -423,7 +399,7 @@
                     <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
                     
                     <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
-                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
+                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Dump to Phone & Copy Caption</button>
                         <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Auto-Archive)</button>
                         <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot</button>
                     </div>
@@ -441,9 +417,8 @@
             const btnGroup = document.getElementById(`btnGroup-${id}`);
             
             if (data.images && data.images.length > 0) {
-                gallery.innerHTML = data.images.map(item => {
-                    const info = getImageInfo(item);
-                    const url = loadedImages[info.vaultKey] || '';
+                gallery.innerHTML = data.images.map(fileName => {
+                    const url = loadedImages[fileName] || '';
                     return `<div class="gallery-item"><img src="${url}"></div>`;
                 }).join('');
                 gallery.style.display = 'flex';
@@ -470,51 +445,37 @@
             if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
             
             for (let file of files) {
-                const imgObj = await uploadFileToVault(file);
-                appData.slots[id].images.push(imgObj);
+                const fileName = await uploadFileToVault(file);
+                appData.slots[id].images.push(fileName);
             }
             
             hydrateSlotUI(id);
-            await saveToCloudImmediate();
+            saveToCloud();
             event.target.value = ""; 
         }
 
         function updateCaption(id, text) {
             if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
             appData.slots[id].caption = text;
-            saveToCloudImmediate();
+            saveToCloud();
             hydrateSlotUI(id);
         }
 
-        async function clearSlot(id) {
+        function clearSlot(id) {
             appData.slots[id] = { caption: "", images: [] };
             hydrateSlotUI(id);
-            await saveToCloudImmediate();
-        }
-
-        async function clearAllSlots() {
-            if(confirm("Are you sure you want to clear ALL scheduled slots? (This won't delete the actual photos from your Vault).")) {
-                document.getElementById('cloudStatus').innerText = "CLEARING ALL SLOTS...";
-                
-                Object.keys(appData.slots).forEach(id => {
-                    appData.slots[id] = { caption: "", images: [] };
-                });
-                
-                renderApp();
-                await saveToCloudImmediate();
-                document.getElementById('cloudStatus').innerText = "(★) ALL SLOTS CLEARED";
-            }
+            saveToCloud();
         }
 
         // --- STASH & AUTO-FILL ---
         async function uploadToStash(event) {
             const files = Array.from(event.target.files);
             for (let file of files) {
-                const imgObj = await uploadFileToVault(file);
-                appData.stash.push(imgObj);
+                const fileName = await uploadFileToVault(file);
+                appData.stash.push(fileName);
                 renderStash();
             }
-            await saveToCloudImmediate();
+            saveToCloud();
             event.target.value = "";
         }
 
@@ -527,20 +488,19 @@
                 return;
             }
 
-            previewContainer.innerHTML = appData.stash.map((item, index) => {
-                const info = getImageInfo(item);
-                const url = loadedImages[info.vaultKey] || '';
+            previewContainer.innerHTML = appData.stash.map((fileName, index) => {
+                const url = loadedImages[fileName] || '';
                 return `<img src="${url}" class="stash-thumb" onclick="removeFromStash(${index})" title="Click to remove">`;
             }).join('');
         }
 
-        async function removeFromStash(index) {
+        function removeFromStash(index) {
             appData.stash.splice(index, 1);
             renderStash();
-            await saveToCloudImmediate();
+            saveToCloud();
         }
 
-        async function autoFillDay() {
+        function autoFillDay() {
             const schedContainer = document.getElementById('scheduled-container');
             const slots = Array.from(schedContainer.querySelectorAll('.slot'));
 
@@ -548,21 +508,21 @@
 
             let slotIndex = 0;
             while (appData.stash.length > 0) {
-                const item = appData.stash.shift(); 
+                const fileName = appData.stash.shift(); 
                 const targetSlot = slots[slotIndex];
                 const id = targetSlot.id.replace('slot-', '');
                 
                 if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
-                appData.slots[id].images.push(item);
+                appData.slots[id].images.push(fileName);
                 
                 slotIndex = (slotIndex + 1) % slots.length;
             }
             
             renderApp();
-            await saveToCloudImmediate();
+            saveToCloud();
         }
 
-        // --- PREP POST & CLEAN ORIGINAL DOWNLOAD ---
+        // --- PREP POST & AUTO DUMP ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
@@ -576,51 +536,32 @@
                 }
             }
 
-            // 2. Download via Data URL (The method confirmed working on your device)
+            // 2. Download with QUEUE_DUMP prefix so they group together in downloads
             if (data.images && data.images.length > 0) {
-                for (let item of data.images) {
-                    try {
-                        const info = getImageInfo(item);
-
-                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
-                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
-                        });
-                        
-                        if (response.ok) {
-                            const blob = await response.blob();
-                            
-                            const reader = new FileReader();
-                            await new Promise((resolve) => {
-                                reader.onloadend = () => {
-                                    const a = document.createElement('a');
-                                    a.href = reader.result;
-                                    // Downloads directly to your phone using whatever original name it came with
-                                    a.download = info.originalName;
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    resolve();
-                                };
-                                reader.readAsDataURL(blob);
-                            });
-                        }
-                    } catch (e) {
-                        console.error("Download failed for:", item, e);
+                data.images.forEach((fileName, index) => {
+                    const url = loadedImages[fileName];
+                    if (url) {
+                        const a = document.createElement('a');
+                        a.href = url;
+                        const ext = fileName.split('.').pop() || 'jpg';
+                        a.download = `QUEUE_DUMP_img${index + 1}_${Date.now()}.${ext}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
                     }
-                }
+                });
             }
 
-            alert("Caption copied & photos downloaded directly to your phone (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+            alert("caption copied & photos sent to downloads (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
             const data = appData.slots[id];
-            if (!data || !data.images) return await clearSlot(id);
+            if (!data || !data.images) return clearSlot(id);
 
             document.getElementById('cloudStatus').innerText = "ARCHIVING POSTED FILES...";
 
-            for (let item of data.images) {
-                const info = getImageInfo(item);
+            for (let fileName of data.images) {
                 try {
                     await fetch(`${dbConfig.url}/storage/v1/object/move`, {
                         method: 'POST',
@@ -631,16 +572,16 @@
                         },
                         body: JSON.stringify({
                             bucketId: 'vault',
-                            sourceKey: info.vaultKey,
-                            destinationKey: `posted/${info.vaultKey}`
+                            sourceKey: fileName,
+                            destinationKey: `posted/${fileName}`
                         })
                     });
                 } catch (err) {
-                    console.error("Failed to move file in cloud:", info.vaultKey);
+                    console.error("Failed to move file in cloud:", fileName);
                 }
             }
 
-            await clearSlot(id);
+            clearSlot(id);
             alert("moved to posted folder & cleared (★^O^★)");
         }
 
@@ -670,7 +611,7 @@
             container.appendChild(div);
         }
 
-        async function saveAndCloseSettings() {
+        function saveAndCloseSettings() {
             const inputs = document.querySelectorAll('#scheduleInputsContainer input[type="time"]');
             let newTimes = [];
             inputs.forEach(input => { if(input.value) newTimes.push(input.value); });
@@ -678,16 +619,17 @@
             appData.schedule = newTimes;
             document.getElementById('settingsModal').style.display = 'none';
             renderApp();
-            await saveToCloudImmediate();
+            saveToCloud();
         }
 
-        async function addRandomSlot() {
+        function addRandomSlot() {
             appData.randomSlotCount++;
             renderApp();
-            await saveToCloudImmediate();
+            saveToCloud();
         }
 
         init();
     </script>
 </body>
 </html>
+
