@@ -564,7 +564,7 @@
             saveToCloud();
         }
 
-        // --- PREP POST & SEQUENTIAL FILE DOWNLOAD ---
+        // --- PREP POST & SEQUENTIAL FILE DOWNLOAD WITH DIAGNOSTICS ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
@@ -574,11 +574,12 @@
                 try {
                     await navigator.clipboard.writeText(data.caption);
                 } catch (err) {
+                    alert(`Caption copy failed:\n\n${err.message}`);
                     console.error("Caption copy failed");
                 }
             }
 
-            // 2. Download sequentially with a hard pause
+            // 2. Download sequentially with a hard pause and explicit error alerts
             if (data.images && data.images.length > 0) {
                 for (let i = 0; i < data.images.length; i++) {
                     let fileName = data.images[i];
@@ -597,36 +598,50 @@
                             
                             // Using FileReader Data URL to force the physical download 
                             const reader = new FileReader();
-                            await new Promise((resolve) => {
+                            await new Promise((resolve, reject) => {
                                 reader.onloadend = () => {
-                                    const a = document.createElement('a');
-                                    a.style.display = 'none';
-                                    a.href = reader.result;
-                                    a.download = originalName;
-                                    document.body.appendChild(a);
-                                    
-                                    a.click();
-                                    
-                                    document.body.removeChild(a);
-                                    resolve();
+                                    try {
+                                        const a = document.createElement('a');
+                                        a.style.display = 'none';
+                                        a.href = reader.result;
+                                        a.download = originalName;
+                                        document.body.appendChild(a);
+                                        
+                                        a.click();
+                                        
+                                        document.body.removeChild(a);
+                                        resolve();
+                                    } catch (clickErr) {
+                                        alert(`Download step failed for ${originalName}:\n\n${clickErr.message}`);
+                                        reject(clickErr);
+                                    }
                                 };
+                                
+                                reader.onerror = () => {
+                                    alert(`Failed to convert image data for ${originalName}:\n\n${reader.error.message}`);
+                                    reject(reader.error);
+                                };
+                                
                                 reader.readAsDataURL(blob);
                             });
                             
                             // HARD PAUSE: Wait 3.5 seconds before moving to the next photo
-                            // This ensures Android fully processes the download file before starting the next
                             if (i < data.images.length - 1) {
                                 await new Promise(resolve => setTimeout(resolve, 3500));
                             }
+                        } else {
+                            const errorText = await response.text();
+                            alert(`Supabase refused the download for ${fileName}!\n\nStatus Code: ${response.status}\nError: ${errorText}`);
                         }
                     } catch (e) {
+                        alert(`Network or System Error on ${fileName}:\n\n${e.message}\n\nPlease check your internet connection and Supabase URL.`);
                         console.error("Download failed for:", fileName, e);
                     }
                 }
                 document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             }
 
-            alert("Caption copied & photos downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+            alert("Sequence complete. If you didn't get any error pop-ups, the photos should be in your downloads folder! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
