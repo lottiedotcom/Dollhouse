@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Manager (★^O^★)</title>
     
-    <!-- App Meta Tags -->
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon.jpg">
     <meta name="mobile-web-app-capable" content="yes">
@@ -14,7 +13,6 @@
     <meta name="theme-color" content="#ffb6c1">
 
     <style>
-        /* 2000s Baby Pink & Blue Aesthetic */
         :root {
             --baby-pink: #ffb6c1;
             --hot-pink: #ff69b4;
@@ -42,7 +40,6 @@
             text-align: center;
         }
 
-        /* Modals (Supabase & Settings) */
         .modal-overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(255, 240, 245, 0.9); z-index: 1000;
@@ -59,7 +56,7 @@
         .input-field {
             width: 100%; padding: 10px; margin-bottom: 15px;
             border: 2px inset var(--baby-pink); border-radius: 5px;
-            font-family: 'Verdana', sans-serif; background: #f0f8ff;
+            font-family: 'Verdana', sans-serif; background: #f0f8ff; color: #333;
         }
 
         .header {
@@ -103,7 +100,6 @@
             font-weight: bold; margin-bottom: 15px; text-transform: uppercase;
         }
 
-        /* Stash Drawer */
         .stash-drawer {
             background: white; border: 3px solid var(--baby-blue); border-radius: 10px;
             padding: 15px; margin-bottom: 20px; box-shadow: 3px 3px 0px var(--baby-pink);
@@ -131,9 +127,13 @@
             border-radius: 10px; white-space: nowrap; border: 1px solid white; pointer-events: none;
         }
 
-        .stash-actions { display: flex; gap: 10px; margin-top: 10px; }
+        .upload-dashboard {
+            background: #f0f8ff; padding: 12px; border: 2px inset var(--baby-blue);
+            border-radius: 5px; margin-top: 15px;
+        }
 
-        /* Day Navigation */
+        .stash-actions { display: flex; gap: 10px; }
+
         .day-navigation {
             display: flex; justify-content: center; align-items: center; gap: 20px;
             margin: 20px 0;
@@ -141,7 +141,6 @@
         .day-navigation h2 { margin: 0; color: var(--dark-blue); text-shadow: 1px 1px white; }
         .nav-arrow { font-size: 20px; padding: 5px 15px; background: var(--baby-pink); border-color: var(--hot-pink); }
 
-        /* Grid & Sections */
         .grid-container {
             display: grid; grid-template-columns: 1fr; gap: 20px;
             max-width: 900px; margin: 0 auto;
@@ -152,7 +151,6 @@
             padding: 15px; border-radius: 10px; box-shadow: 3px 3px 0px var(--baby-pink);
         }
 
-        /* Slots */
         .slot {
             background: #fdfdfd; border: 2px dashed var(--baby-pink);
             margin-bottom: 15px; padding: 15px; text-align: center; border-radius: 8px;
@@ -201,7 +199,6 @@
         .time-row { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px; }
         .remove-btn { background: #ff9999; border: 2px outset #cc0000; color: white; font-weight: bold; cursor: pointer; padding: 6px 10px; border-radius: 5px; }
 
-        /* Kaomoji Dictionary Styles */
         .kaomoji-form {
             background: white; border: 3px solid var(--baby-blue); border-radius: 10px;
             padding: 15px; margin-bottom: 20px; box-shadow: 3px 3px 0px var(--baby-pink);
@@ -223,7 +220,6 @@
 </head>
 <body>
 
-    <!-- Cloud Vault Setup Modal -->
     <div id="dbModal" class="modal-overlay">
         <div class="modal-content">
             <h2>(★) Vault Setup (★)</h2>
@@ -234,7 +230,6 @@
         </div>
     </div>
 
-    <!-- Settings Modal -->
     <div class="modal-overlay" id="settingsModal">
         <div class="modal-content">
             <h2>Your Schedule</h2>
@@ -242,7 +237,6 @@
             <div id="scheduleInputsContainer"></div>
             <button class="btn-style" style="width: 100%; margin: 15px 0; background: var(--baby-pink);" onclick="addTimeInput()">+ Add Time</button>
             <button class="btn-style" style="width: 100%;" onclick="saveAndCloseSettings()">Save & Close</button>
-            
             <hr style="border: 1px dashed #ccc; margin: 20px 0;">
             <button class="btn-style" style="width: 100%; background: #ff9999; color: white; border-color: #cc0000;" onclick="resetCredentials()">(★) Disconnect / Reset Vault</button>
         </div>
@@ -258,7 +252,6 @@
         </div>
     </div>
 
-    <!-- App Navigation Tabs -->
     <div class="tab-bar">
         <button id="btn-tab-queue" class="tab-btn active" onclick="switchTab('queue')">Queue Planner</button>
         <button id="btn-tab-kaomoji" class="tab-btn" onclick="switchTab('kaomoji')">Kaomoji Dict.</button>
@@ -266,9 +259,6 @@
 
     <div id="cloudStatus">Checking connection...</div>
 
-    <!-- ============================================== -->
-    <!-- TAB 1: QUEUE MANAGER                           -->
-    <!-- ============================================== -->
     <div id="tab-queue" style="display: none;">
         
         <div class="stash-drawer">
@@ -276,11 +266,9 @@
                 <span>(★) Content Stash</span>
             </div>
             
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                <input type="text" id="stashTagInput" list="savedTagsList" class="input-field" style="margin-bottom:0; flex: 1;" placeholder="Set/Tag Name (Select or type new)">
-                <datalist id="savedTagsList"></datalist>
-                
-                <select id="stashFilter" class="input-field" style="margin-bottom:0; flex: 1;" onchange="updateStashFilter()">
+            <!-- STASH VIEW FILTER -->
+            <div style="margin-bottom: 10px;">
+                <select id="stashFilter" class="input-field" style="margin-bottom:0;" onchange="updateStashFilter()">
                     <option value="All">View All Tags</option>
                 </select>
             </div>
@@ -291,17 +279,25 @@
                 <span style="font-size: 12px; color: #aaa;">Dump photos or GIFs here to use later...</span>
             </div>
             
-            <div class="stash-actions">
-                <label class="btn-style" style="flex: 1; text-align: center;">
-                    + Select Photos / GIFs
-                    <input type="file" id="stashFileSelect" multiple accept="image/*,image/gif" style="display: none;" onchange="previewSelectedFiles(event)">
-                </label>
-                <button class="btn-style" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);" onclick="uploadAndSaveTag()">(★) Upload & Save Tag</button>
+            <!-- NEW TAGGING DASHBOARD -->
+            <div class="upload-dashboard">
+                <div style="font-size: 13px; color: var(--hot-pink); margin-bottom: 8px; font-weight: bold; text-align: center;">Tag Your Uploads:</div>
+                <select id="uploadTagSelect" class="input-field" style="margin-bottom: 8px;">
+                    <option value="">-- Choose Existing Tag --</option>
+                </select>
+                <input type="text" id="newUploadTagInput" class="input-field" style="margin-bottom: 12px;" placeholder="...or type a NEW tag name">
+                
+                <div class="stash-actions" style="margin-top: 0;">
+                    <label class="btn-style" style="flex: 1; text-align: center;">
+                        + Select Photos
+                        <input type="file" id="stashFileSelect" multiple accept="image/*,image/gif" style="display: none;" onchange="previewSelectedFiles(event)">
+                    </label>
+                    <button class="btn-style" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);" onclick="uploadAndSaveTag()">(★) Upload</button>
+                </div>
+                <div id="uploadStatusText" style="font-size: 11px; color: var(--dark-blue); text-align: center; margin-top: 5px; font-weight: bold;"></div>
             </div>
-            <div id="uploadStatusText" style="font-size: 11px; color: var(--dark-blue); text-align: center; margin-top: 5px; font-weight: bold;"></div>
 
-            <!-- Auto-Fill Dropdown UI -->
-            <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
+            <div style="display: flex; gap: 10px; margin-top: 15px; align-items: center;">
                 <select id="autoFillAmount" class="input-field" style="margin-bottom: 0; width: 120px;">
                     <option value="1">1 item</option>
                     <option value="2">2 items</option>
@@ -336,12 +332,7 @@
         </div>
     </div>
 
-    <!-- ============================================== -->
-    <!-- TAB 2: KAOMOJI DICTIONARY                      -->
-    <!-- ============================================== -->
     <div id="tab-kaomoji" style="display: none;">
-        
-        <!-- Add New Combo Form -->
         <div class="kaomoji-form">
             <h2 style="margin-top: 0;">Add New Combo</h2>
             <div style="display: flex; gap: 10px; align-items: stretch;">
@@ -353,26 +344,20 @@
             </div>
         </div>
 
-        <!-- Search & List -->
         <div class="section" style="max-width: 900px; margin: 0 auto;">
             <input type="text" id="searchKTags" class="input-field" placeholder="🔍 Search tags (e.g. angel, star)..." oninput="renderKaomojiList()">
-            
-            <div id="kaomoji-list-container" style="margin-top: 20px;">
-                <!-- Cards dynamically inject here -->
-            </div>
+            <div id="kaomoji-list-container" style="margin-top: 20px;"></div>
         </div>
-
     </div>
 
-    <!-- Core App Setup Script -->
     <script>
+        // Updated Service Worker Registration to force fresh pull
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').then(() => {
-                console.log("Service Worker Registered");
+            navigator.serviceWorker.register('sw.js').then(reg => {
+                res.update(); // Forces browser to pull newest sw.js
             });
         }
 
-        // Shared Global Credentials
         let dbConfig = { url: '', key: '' };
 
         function init() {
@@ -381,11 +366,10 @@
                 dbConfig = JSON.parse(savedConfig);
                 document.getElementById('dbModal').style.display = 'none';
                 
-                // Initialize both modular scripts
                 if(typeof initQueue === 'function') initQueue();
                 if(typeof initKaomoji === 'function') initKaomoji();
                 
-                switchTab('queue'); // Default Tab
+                switchTab('queue');
             } else {
                 document.getElementById('dbModal').style.display = 'flex';
                 document.getElementById('cloudStatus').innerText = "AWAITING CREDENTIALS...";
@@ -420,11 +404,8 @@
 
         window.onload = init;
     </script>
-
-    <!-- Modular Script Imports -->
     <script src="queue.js"></script>
     <script src="kaomoji.js"></script>
-
 </body>
 </html>
 
