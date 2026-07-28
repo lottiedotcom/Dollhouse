@@ -236,21 +236,24 @@
             </div>
             
             <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                <input type="text" id="stashTagInput" class="input-field" style="margin-bottom:0; flex: 1;" placeholder="Set/Tag Name (e.g. Pink Set)">
+                <input type="text" id="stashTagInput" list="savedTagsList" class="input-field" style="margin-bottom:0; flex: 1;" placeholder="Set/Tag Name (Select or type new)">
+                <datalist id="savedTagsList"></datalist>
+                
                 <select id="stashFilter" class="input-field" style="margin-bottom:0; flex: 1;" onchange="updateStashFilter()">
                     <option value="All">View All Tags</option>
                 </select>
             </div>
+            
             <div id="stashWarning" style="display:none; color: #cc0000; font-size: 11px; margin-bottom: 10px;">★ Tip: Keep stash small (10-15 max) to avoid overwhelm!</div>
 
             <div class="stash-preview-container" id="stashPreview">
-                <span style="font-size: 12px; color: #aaa;">Dump photos here to use later...</span>
+                <span style="font-size: 12px; color: #aaa;">Dump photos or GIFs here to use later...</span>
             </div>
             
             <div class="stash-actions">
                 <label class="btn-style" style="flex: 1; text-align: center;">
-                    + Select Photos
-                    <input type="file" id="stashFileSelect" multiple accept="image/*" style="display: none;" onchange="previewSelectedFiles(event)">
+                    + Select Photos / GIFs
+                    <input type="file" id="stashFileSelect" multiple accept="image/*,image/gif" style="display: none;" onchange="previewSelectedFiles(event)">
                 </label>
                 <button class="btn-style" style="flex: 1; background: var(--baby-pink); border-color: var(--hot-pink);" onclick="uploadAndSaveTag()">(★) Upload & Save Tag</button>
             </div>
@@ -307,6 +310,7 @@
             schedule: ['09:00', '13:00', '18:00', '22:00'],
             randomSlotCount: 3,
             stash: [],
+            savedTags: [],
             slots: {}
         };
 
@@ -370,6 +374,7 @@
                 if (response.ok) {
                     const json = await response.json();
                     appData = { ...appData, ...json };
+                    if (!appData.savedTags) appData.savedTags = [];
                     
                     let migrated = false;
                     Object.keys(appData.slots).forEach(key => {
@@ -419,17 +424,29 @@
             }, 1000);
         }
 
+        // Optimized Non-blocking High-Res Upload
         async function uploadFileToVault(file) {
-            const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-            await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
+            const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
+            const fileName = `${Date.now()}_${cleanName}`;
+            
+            // Brief pause to allow the browser UI to update status text before network thread works
+            await new Promise(r => setTimeout(r, 50));
+
+            const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
                 method: 'POST',
                 headers: { 
                     'apikey': dbConfig.key, 
                     'Authorization': `Bearer ${dbConfig.key}`,
-                    'Content-Type': file.type
+                    'Content-Type': file.type || 'image/jpeg'
                 },
                 body: file
             });
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Upload rejected (${res.status}): ${errText}`);
+            }
+
             loadedImages[fileName] = URL.createObjectURL(file);
             return fileName;
         }
@@ -517,7 +534,7 @@
             return `
                 <div class="slot" id="slot-${id}">
                     <div class="slot-title">${title}</div>
-                    <input type="file" multiple accept="image/*" onchange="uploadDirectToSlot(event, '${id}')">
+                    <input type="file" multiple accept="image/*,image/gif" onchange="uploadDirectToSlot(event, '${id}')">
                     
                     <div class="slot-gallery" id="gallery-${id}" style="display: none;"></div>
                     
@@ -569,9 +586,14 @@
             const files = Array.from(event.target.files);
             if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
             
+            document.getElementById('cloudStatus').innerText = "UPLOADING DIRECT...";
             for (let file of files) {
-                const fileName = await uploadFileToVault(file);
-                appData.slots[id].images.push({ vaultKey: fileName, originalName: file.name, tag: 'Direct' });
+                try {
+                    const fileName = await uploadFileToVault(file);
+                    appData.slots[id].images.push({ vaultKey: fileName, originalName: file.name, tag: 'Direct' });
+                } catch(e) {
+                    alert(`Failed to upload ${file.name}: ${e.message}`);
+                }
             }
             hydrateSlotUI(id);
             saveToCloud();
@@ -607,31 +629,47 @@
 
         function previewSelectedFiles(event) {
             pendingFilesToUpload = Array.from(event.target.files);
-            document.getElementById('uploadStatusText').innerText = `${pendingFilesToUpload.length} photo(s) selected ready to upload.`;
+            let totalMB = pendingFilesToUpload.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024);
+            document.getElementById('uploadStatusText').innerText = `${pendingFilesToUpload.length} file(s) selected (${totalMB.toFixed(1)}MB total) ready to upload.`;
         }
 
         async function uploadAndSaveTag() {
             if (pendingFilesToUpload.length === 0) {
-                return alert("Please click '+ Select Photos' first!");
+                return alert("Please click '+ Select Photos / GIFs' first!");
             }
             const tagInput = document.getElementById('stashTagInput').value.trim();
             if (!tagInput) {
-                return alert("Please type a Tag / Set Name first!");
+                return alert("Please type or select a Tag / Set Name first!");
+            }
+
+            // Save tag permanently to list
+            if (!appData.savedTags) appData.savedTags = [];
+            if (!appData.savedTags.includes(tagInput)) {
+                appData.savedTags.push(tagInput);
             }
 
             const statusEl = document.getElementById('uploadStatusText');
+            let successCount = 0;
+
             for (let i = 0; i < pendingFilesToUpload.length; i++) {
-                statusEl.innerText = `Uploading ${i + 1} of ${pendingFilesToUpload.length}...`;
                 const file = pendingFilesToUpload[i];
-                const fileName = await uploadFileToVault(file);
-                appData.stash.push({ vaultKey: fileName, originalName: file.name, tag: tagInput });
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+                statusEl.innerText = `Uploading ${i + 1} of ${pendingFilesToUpload.length}: ${file.name} (${sizeMB}MB)...`;
+                
+                try {
+                    const fileName = await uploadFileToVault(file);
+                    appData.stash.push({ vaultKey: fileName, originalName: file.name, tag: tagInput });
+                    successCount++;
+                } catch (err) {
+                    alert(`Failed to upload ${file.name}:\n\n${err.message}`);
+                }
             }
 
             pendingFilesToUpload = [];
             document.getElementById('stashFileSelect').value = "";
-            statusEl.innerText = "(★) Successfully uploaded and saved to tag: " + tagInput;
+            statusEl.innerText = `(★) Uploaded ${successCount} file(s) & saved to tag: ${tagInput}`;
             
-            currentStashFilter = tagInput; // Automatically switch filter to newly saved tag
+            currentStashFilter = tagInput; 
             renderStash();
             saveToCloud();
         }
@@ -640,12 +678,18 @@
             updateCounters();
             const previewContainer = document.getElementById('stashPreview');
             const filterDropdown = document.getElementById('stashFilter');
+            const datalist = document.getElementById('savedTagsList');
             
-            const tags = new Set();
-            appData.stash.forEach(item => tags.add(getImageInfo(item).tag));
+            // Populate Datalist suggestions for auto-complete typing
+            if (!appData.savedTags) appData.savedTags = [];
+            datalist.innerHTML = appData.savedTags.map(t => `<option value="${t}">`).join('');
+
+            // Collect all unique tags (both saved memory tags and active stash tags)
+            const allTags = new Set([...appData.savedTags]);
+            appData.stash.forEach(item => allTags.add(getImageInfo(item).tag));
             
             let filterOptions = `<option value="All">View All Tags (${appData.stash.length})</option>`;
-            tags.forEach(tag => {
+            allTags.forEach(tag => {
                 const count = appData.stash.filter(i => getImageInfo(i).tag === tag).length;
                 const selected = tag === currentStashFilter ? 'selected' : '';
                 filterOptions += `<option value="${tag}" ${selected}>${tag} (${count})</option>`;
@@ -667,7 +711,7 @@
             });
 
             if (html === '') {
-                previewContainer.innerHTML = '<span style="font-size: 12px; color: #aaa;">No photos match this tag...</span>';
+                previewContainer.innerHTML = '<span style="font-size: 12px; color: #aaa;">No items match this tag...</span>';
             } else {
                 previewContainer.innerHTML = html;
             }
@@ -680,7 +724,6 @@
         }
 
         function autoFillDayCustom() {
-            // Find active tag items
             let eligibleIndices = [];
             appData.stash.forEach((item, idx) => {
                 const info = getImageInfo(item);
@@ -690,10 +733,10 @@
             });
 
             if (eligibleIndices.length === 0) {
-                return alert("No photos found in the current tag filter to auto-slot!");
+                return alert("No items found in the current tag filter to auto-slot!");
             }
 
-            let amountStr = prompt(`How many photos from tag '${currentStashFilter}' do you want to pull into Day ${currentDay}? (Available: ${eligibleIndices.length})`, "3");
+            let amountStr = prompt(`How many items from tag '${currentStashFilter}' do you want to pull into Day ${currentDay}? (Available: ${eligibleIndices.length})`, "3");
             if (!amountStr) return;
             let amount = parseInt(amountStr);
             if (isNaN(amount) || amount <= 0) return alert("Please enter a valid number.");
@@ -706,7 +749,6 @@
             const slots = Array.from(schedContainer.querySelectorAll('.slot'));
             if (slots.length === 0) return alert("No slots available on this day!");
 
-            // Extract exact items from stash (from highest index to lowest to avoid splicing shifts)
             let itemsToSlot = [];
             let pulledIndices = eligibleIndices.slice(0, amount).reverse();
             pulledIndices.forEach(idx => {
@@ -715,7 +757,6 @@
             });
             itemsToSlot.reverse();
 
-            // Distribute into slots sequentially
             let slotIndex = 0;
             while (itemsToSlot.length > 0) {
                 const item = itemsToSlot.shift();
@@ -730,7 +771,7 @@
 
             renderApp();
             saveToCloud();
-            alert(`Successfully pulled ${amount} photo(s) into Day ${currentDay} slots! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
+            alert(`Successfully pulled ${amount} item(s) into Day ${currentDay} slots! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
         }
 
         // --- PREP POST & DOWNLOAD ---
@@ -746,7 +787,7 @@
                 for (let i = 0; i < data.images.length; i++) {
                     const info = getImageInfo(data.images[i]);
                     try {
-                        document.getElementById('cloudStatus').innerText = `DOWNLOADING PHOTO ${i + 1} OF ${data.images.length}...`;
+                        document.getElementById('cloudStatus').innerText = `DOWNLOADING ITEM ${i + 1} OF ${data.images.length}...`;
                         const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}?t=${Date.now()}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
                             cache: 'no-store'
@@ -776,7 +817,7 @@
                 }
                 document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
             }
-            alert("Caption copied & photos downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+            alert("Caption copied & files downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
