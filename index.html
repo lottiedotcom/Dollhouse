@@ -543,7 +543,7 @@
             await saveToCloudImmediate();
         }
 
-        // --- PREP POST & COPY TO CLIPBOARD ---
+        // --- PREP POST (CLIPBOARD ENGINE) ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
@@ -561,12 +561,13 @@
                 }
             }
 
-            // 2. Download securely via Supabase and write to Clipboard
+            // 2. Fetch images, convert them to PNGs (required by Android Chrome), and copy to clipboard
             if (data.images && data.images.length > 0) {
                 for (let item of data.images) {
                     try {
                         const info = getImageInfo(item);
 
+                        // Fetch the raw high-res image securely from your vault
                         const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
                         });
@@ -574,27 +575,45 @@
                         if (response.ok) {
                             const blob = await response.blob();
                             
-                            // Write directly to the clipboard
+                            // To bypass Chrome's block on copying JPGs, we draw the image to a background canvas
+                            // and export it as a PNG blob, which the clipboard API guarantees it will accept.
+                            const img = new Image();
+                            const url = window.URL.createObjectURL(blob);
+                            
+                            await new Promise((resolve, reject) => {
+                                img.onload = resolve;
+                                img.onerror = reject;
+                                img.src = url;
+                            });
+
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+
+                            const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                            
+                            // Write the newly created PNG directly to the system clipboard
                             await navigator.clipboard.write([
                                 new ClipboardItem({
-                                    [blob.type]: blob
+                                    'image/png': pngBlob
                                 })
                             ]);
                             
                             copiedCount++;
+                            window.URL.revokeObjectURL(url);
+                            
                             // Pause slightly so the keyboard manager registers each image separately
                             await new Promise(resolve => setTimeout(resolve, 600)); 
                         }
                     } catch (e) {
-                        console.error("Download to clipboard failed for:", item, e);
+                        console.error("Clipboard copy failed for:", item, e);
                     }
                 }
-            }
-
-            if (copiedCount > 0 || data.caption) {
                 alert(`Caption and ${copiedCount} photo(s) copied to your keyboard clipboard! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
-            } else {
-                alert("There was nothing to copy in this slot!");
+            } else if (data.caption) {
+                alert("Caption copied to your keyboard! (No photos in this slot)");
             }
         }
 
