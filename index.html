@@ -424,12 +424,10 @@
             }, 1000);
         }
 
-        // Optimized Non-blocking High-Res Upload
         async function uploadFileToVault(file) {
             const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
             const fileName = `${Date.now()}_${cleanName}`;
             
-            // Brief pause to allow the browser UI to update status text before network thread works
             await new Promise(r => setTimeout(r, 50));
 
             const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/${fileName}`, {
@@ -642,7 +640,6 @@
                 return alert("Please type or select a Tag / Set Name first!");
             }
 
-            // Save tag permanently to list
             if (!appData.savedTags) appData.savedTags = [];
             if (!appData.savedTags.includes(tagInput)) {
                 appData.savedTags.push(tagInput);
@@ -680,11 +677,9 @@
             const filterDropdown = document.getElementById('stashFilter');
             const datalist = document.getElementById('savedTagsList');
             
-            // Populate Datalist suggestions for auto-complete typing
             if (!appData.savedTags) appData.savedTags = [];
             datalist.innerHTML = appData.savedTags.map(t => `<option value="${t}">`).join('');
 
-            // Collect all unique tags (both saved memory tags and active stash tags)
             const allTags = new Set([...appData.savedTags]);
             appData.stash.forEach(item => allTags.add(getImageInfo(item).tag));
             
@@ -723,6 +718,7 @@
             saveToCloud();
         }
 
+        // --- RANDOMIZED CUSTOM AUTO-SLOT ---
         function autoFillDayCustom() {
             let eligibleIndices = [];
             appData.stash.forEach((item, idx) => {
@@ -749,29 +745,35 @@
             const slots = Array.from(schedContainer.querySelectorAll('.slot'));
             if (slots.length === 0) return alert("No slots available on this day!");
 
+            // 1. Shuffle eligible indices randomly so we pick a random subset from the tag set
+            eligibleIndices.sort(() => Math.random() - 0.5);
+
+            // 2. Extract the custom amount of items from the stash
             let itemsToSlot = [];
-            let pulledIndices = eligibleIndices.slice(0, amount).reverse();
+            let pulledIndices = eligibleIndices.slice(0, amount).sort((a, b) => b - a); // sort descending for clean splicing
             pulledIndices.forEach(idx => {
                 let removed = appData.stash.splice(idx, 1)[0];
                 itemsToSlot.push(removed);
             });
-            itemsToSlot.reverse();
 
-            let slotIndex = 0;
+            // 3. Shuffle the pulled items themselves so they are randomized
+            itemsToSlot.sort(() => Math.random() - 0.5);
+
+            // 4. Distribute them randomly across the available day slots
             while (itemsToSlot.length > 0) {
                 const item = itemsToSlot.shift();
-                const targetSlot = slots[slotIndex];
-                const id = targetSlot.id.replace('slot-', '');
+                
+                // Pick a random slot from the day's slot list
+                const randomSlotNode = slots[Math.floor(Math.random() * slots.length)];
+                const id = randomSlotNode.id.replace('slot-', '');
                 
                 if (!appData.slots[id]) appData.slots[id] = { caption: "", images: [] };
                 appData.slots[id].images.push(item);
-                
-                slotIndex = (slotIndex + 1) % slots.length;
             }
 
             renderApp();
             saveToCloud();
-            alert(`Successfully pulled ${amount} item(s) into Day ${currentDay} slots! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
+            alert(`Successfully and randomly distributed ${amount} item(s) into Day ${currentDay} slots! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
         }
 
         // --- PREP POST & DOWNLOAD ---
@@ -889,4 +891,3 @@
     </script>
 </body>
 </html>
-
