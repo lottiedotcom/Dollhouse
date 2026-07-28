@@ -559,14 +559,13 @@
                 }
             }
 
-            // 2. Download securely using Blob URLs
+            // 2. Download via Data URL with exact clean original filename
             if (data.images && data.images.length > 0) {
                 for (let item of data.images) {
                     try {
                         const info = getImageInfo(item);
                         fileNamesToSearch.push(info.originalName);
 
-                        // Authenticated fetch directly from the secure vault
                         const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
                         });
@@ -574,19 +573,19 @@
                         if (response.ok) {
                             const blob = await response.blob();
                             
-                            // Use Blob URL instead of Data URL (fixes mobile crash and access denied)
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.style.display = 'none';
-                            a.href = url;
-                            a.download = info.originalName;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            
-                            setTimeout(() => window.URL.revokeObjectURL(url), 2000);
-                        } else {
-                            console.error("Failed to fetch image. Status:", response.status);
+                            const reader = new FileReader();
+                            await new Promise((resolve) => {
+                                reader.onloadend = () => {
+                                    const a = document.createElement('a');
+                                    a.href = reader.result;
+                                    a.download = info.originalName;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    resolve();
+                                };
+                                reader.readAsDataURL(blob);
+                            });
                         }
                     } catch (e) {
                         console.error("Download failed for:", item, e);
@@ -594,7 +593,7 @@
                 }
             }
 
-            alert("caption copied & photos downloaded (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧\n\nOriginal photo name(s) sent to MacroDroid:\n" + fileNamesToSearch.join("\n"));
+            alert("caption copied & photos downloaded (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧\n\nOriginal photo name(s) in your Gallery:\n" + fileNamesToSearch.join("\n"));
         }
 
         async function markAsPosted(id) {
