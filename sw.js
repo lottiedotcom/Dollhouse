@@ -1,39 +1,49 @@
 const CACHE_NAME = 'queue-manager-v2';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json'
+const urlsToCache = [
+    '/',
+    '/index.html',
+    '/queue.js',
+    '/kaomoji.js',
+    '/manifest.json'
 ];
 
-self.addEventListener('install', (e) => {
-  self.skipWaiting();
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
-  );
+self.addEventListener('install', event => {
+    event.waitUntil(
+        caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+    );
+    self.skipWaiting();
 });
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then(keys => {
-      return Promise.all(
-        keys.map(key => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
+self.addEventListener('activate', event => {
+    event.waitUntil(
+        caches.keys().then(cacheNames => {
+            return Promise.all(
+                cacheNames.map(cache => {
+                    if (cache !== CACHE_NAME) {
+                        return caches.delete(cache); // Wipe old caches
+                    }
+                })
+            );
         })
-      );
-    })
-  );
+    );
+    self.clients.claim();
 });
 
-self.addEventListener('fetch', (e) => {
-  // CRITICAL FIX: Bypass the cache entirely for Supabase Vault downloads
-  if (e.request.url.includes('supabase.co')) {
-    e.respondWith(fetch(e.request));
-    return;
-  }
-  
-  e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
-  );
+self.addEventListener('fetch', event => {
+    // NETWORK FIRST STRATEGY: Always fetch fresh code, fallback to cache only if offline.
+    event.respondWith(
+        fetch(event.request)
+            .then(response => {
+                if (response && response.status === 200 && response.type === 'basic') {
+                    const responseToCache = response.clone();
+                    caches.open(CACHE_NAME).then(cache => {
+                        cache.put(event.request, responseToCache);
+                    });
+                }
+                return response;
+            })
+            .catch(() => {
+                return caches.match(event.request);
+            })
+    );
 });
