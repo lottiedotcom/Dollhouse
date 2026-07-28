@@ -192,7 +192,7 @@
 
     <div class="header">
         <h1>(★) Queue Manager</h1>
-        <button class="btn-style" onclick="openSettings()">[*⚙] Schedule</button>
+        <button class="btn-style" onclick="openSettings()">(★) Schedule</button>
     </div>
 
     <div id="cloudStatus">Checking connection...</div>
@@ -399,7 +399,7 @@
                     <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
                     
                     <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
-                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Dump to Phone & Copy Caption</button>
+                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
                         <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Auto-Archive)</button>
                         <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot</button>
                     </div>
@@ -522,7 +522,7 @@
             saveToCloud();
         }
 
-        // --- PREP POST & AUTO DUMP ---
+        // --- PREP POST & ORIGINAL NAME DOWNLOAD ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
@@ -536,15 +536,18 @@
                 }
             }
 
-            // 2. Download with QUEUE_DUMP prefix so they group together in downloads
+            // 2. Download with exact original file name so Gallery duplicate finder matches them
             if (data.images && data.images.length > 0) {
-                data.images.forEach((fileName, index) => {
+                data.images.forEach((fileName) => {
                     const url = loadedImages[fileName];
                     if (url) {
                         const a = document.createElement('a');
                         a.href = url;
-                        const ext = fileName.split('.').pop() || 'jpg';
-                        a.download = `QUEUE_DUMP_img${index + 1}_${Date.now()}.${ext}`;
+                        
+                        // Strip leading timestamp prefix to restore original name
+                        const originalName = fileName.replace(/^\d+_/, '');
+                        a.download = originalName;
+                        
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
@@ -552,7 +555,7 @@
                 });
             }
 
-            alert("caption copied & photos sent to downloads (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
+            alert("caption copied & photos downloaded with original names (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
         }
 
         async function markAsPosted(id) {
