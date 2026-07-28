@@ -418,7 +418,7 @@
                     <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here... (Auto-saves)" oninput="updateCaption('${id}', this.value)"></textarea>
                     
                     <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
-                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
+                        <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Copy Photos & Caption to Keyboard</button>
                         <button class="action-btn posted" onclick="markAsPosted('${id}')">(★) Mark Posted (Auto-Archive)</button>
                         <button class="action-btn clear" onclick="clearSlot('${id}')">[X] Clear Slot</button>
                     </div>
@@ -543,29 +543,30 @@
             await saveToCloudImmediate();
         }
 
-        // --- PREP POST & CLEAN ORIGINAL DOWNLOAD ---
+        // --- PREP POST (CLIPBOARD ENGINE) ---
         async function prepForPost(id) {
             const data = appData.slots[id];
             if (!data) return;
 
-            let fileNamesToSearch = [];
-
-            // 1. Copy caption
+            // 1. Copy caption text to the keyboard first
             if (data.caption) {
                 try {
                     await navigator.clipboard.writeText(data.caption);
+                    // Pause slightly so the keyboard history recognizes the text as a separate copied item
+                    await new Promise(resolve => setTimeout(resolve, 500)); 
                 } catch (err) {
-                    console.error("Caption copy failed");
+                    console.error("Caption copy failed", err);
                 }
             }
 
-            // 2. Download via Data URL with exact clean original filename
+            // 2. Loop through and copy each image to the keyboard's clipboard memory
             if (data.images && data.images.length > 0) {
+                let copiedCount = 0;
                 for (let item of data.images) {
                     try {
                         const info = getImageInfo(item);
-                        fileNamesToSearch.push(info.originalName);
 
+                        // Fetch the raw high-res image securely from your vault
                         const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
                             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
                         });
@@ -573,27 +574,26 @@
                         if (response.ok) {
                             const blob = await response.blob();
                             
-                            const reader = new FileReader();
-                            await new Promise((resolve) => {
-                                reader.onloadend = () => {
-                                    const a = document.createElement('a');
-                                    a.href = reader.result;
-                                    a.download = info.originalName;
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    resolve();
-                                };
-                                reader.readAsDataURL(blob);
-                            });
+                            // Write directly to the system clipboard
+                            await navigator.clipboard.write([
+                                new ClipboardItem({
+                                    [blob.type]: blob
+                                })
+                            ]);
+                            
+                            copiedCount++;
+                            
+                            // Pause slightly so the keyboard history doesn't overwrite the previous image instantly
+                            await new Promise(resolve => setTimeout(resolve, 600)); 
                         }
                     } catch (e) {
-                        console.error("Download failed for:", item, e);
+                        console.error("Clipboard copy failed for:", item, e);
                     }
                 }
+                alert(`Caption and ${copiedCount} photo(s) copied to your keyboard clipboard! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧`);
+            } else if (data.caption) {
+                alert("Caption copied to your keyboard! (No photos in this slot)");
             }
-
-            alert("caption copied & photos downloaded (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧\n\nOriginal photo name(s) in your Gallery:\n" + fileNamesToSearch.join("\n"));
         }
 
         async function markAsPosted(id) {
