@@ -562,29 +562,34 @@
                 }
             }
 
-            // 2. Download via Blob URL using the EXACT untouched original filename
+            // 2. Download using a Data URL stream to bypass Android's Blob URL block
             if (data.images && data.images.length > 0) {
                 for (let item of data.images) {
                     try {
                         const info = getImageInfo(item);
                         fileNamesToSearch.push(info.originalName);
 
-                        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
-                            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
-                        });
+                        // Fetching via the public URL completely removes Authorization header blocks on download
+                        const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/${info.vaultKey}`);
                         
                         if (response.ok) {
                             const blob = await response.blob();
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            // This guarantees the download matches the Adobe folder filename exactly
-                            a.download = info.originalName; 
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
                             
-                            setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+                            // Reverting to the FileReader (Data URL) engine that successfully downloaded to your device before
+                            const reader = new FileReader();
+                            await new Promise((resolve) => {
+                                reader.onloadend = () => {
+                                    const a = document.createElement('a');
+                                    a.href = reader.result;
+                                    // This guarantees the download matches the exact filename without numbers
+                                    a.download = info.originalName; 
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    resolve();
+                                };
+                                reader.readAsDataURL(blob);
+                            });
                         }
                     } catch (e) {
                         console.error("Download failed for:", item, e);
@@ -673,3 +678,4 @@
     </script>
 </body>
 </html>
+
