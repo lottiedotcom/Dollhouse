@@ -31,104 +31,73 @@ function getImageInfo(item) {
     return { vaultKey, originalName, tag: 'Untagged' };
 }
 
+// --------------------------------------------------------
+// SQL DATABASE SYNC ENGINE (Lightning Fast)
+// --------------------------------------------------------
+
 async function initQueue() {
-    document.getElementById('cloudStatus').innerText = "SYNCING VAULT...";
+    document.getElementById('cloudStatus').innerText = "CONNECTING TO DATABASE...";
+    
     try {
-        const response = await fetch(`${dbConfig.url}/storage/v1/object/public/vault/state.json?t=${Date.now()}`, {
-            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` },
+        const response = await fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
+            headers: { 
+                'apikey': dbConfig.key, 
+                'Authorization': `Bearer ${dbConfig.key}` 
+            },
             cache: 'no-store'
         });
         
         if (response.ok) {
-            const json = await response.json();
-            appData = { ...appData, ...json };
-            if (!appData.savedTags) appData.savedTags = [];
-            
-            let migratedSlots = false;
-            Object.keys(appData.slots).forEach(key => {
-                if(!key.startsWith('d1-') && !key.startsWith('d2-') && !key.startsWith('d3-')) {
-                    appData.slots[`d1-${key}`] = appData.slots[key];
-                    delete appData.slots[key];
-                    migratedSlots = true;
-                }
-            });
-
-            if(migratedSlots) saveQueueToCloud();
+            const data = await response.json();
+            if (data && data.length > 0) {
+                const dbState = data[0];
+                appData.schedule = dbState.schedule || appData.schedule;
+                appData.savedTags = dbState.saved_tags || [];
+                appData.stash = dbState.stash || [];
+                appData.slots = dbState.slots || {};
+            }
         }
 
-        document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
+        document.getElementById('cloudStatus').innerText = "(★) DATABASE SYNCED & SECURE";
         
         await preloadAllImages();
         renderApp();
     } catch (err) {
-        console.error("Queue Sync Error:", err);
+        console.error("Database Sync Error:", err);
+        document.getElementById('cloudStatus').innerText = "DATABASE CONNECTION ERROR.";
     }
 }
 
-function saveQueueToCloud() {
-    updateCounters();
+function saveQueueToCloud(silent = false) {
+    if (!silent) updateCounters();
     clearTimeout(queueSyncTimeout);
+    
     queueSyncTimeout = setTimeout(async () => {
-        try {
-            const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
-            await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
-                method: 'POST',
-                headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
-                body: blob
-            });
-            document.getElementById('cloudStatus').innerText = "(★) QUEUE SAVED";
-        } catch (err) {
-            document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
-            console.error("Background Save Error:", err);
-        }
-    }, 1000);
-}
-
-function scrapeCaptionsToMemory() {
-    document.querySelectorAll('.caption-box').forEach(el => {
-        const id = el.id.replace('caption-', '');
-        if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
-        appData.slots[id].caption = el.value;
-    });
-}
-
-// --- NEW ROBUST DIAGNOSTIC SAVE FOR DRAFTS ---
-async function forceSaveDrafts() {
-    if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
-        document.activeElement.blur(); 
-    }
-    
-    scrapeCaptionsToMemory();
-
-    document.getElementById('cloudStatus').innerText = "SAVING DRAFTS...";
-    clearTimeout(queueSyncTimeout); 
-    
-    try {
-        const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
-        const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
-            method: 'POST',
-            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
-            body: blob
-        });
-
-        if(res.ok) {
-            document.getElementById('cloudStatus').innerText = "(★) DRAFTS SAVED TO VAULT";
-            alert("SUCCESS: All photos and captions for all 3 days are securely saved to your Vault!");
-        } else {
-            const errText = await res.text();
-            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
-            
-            // THIS IS THE DIAGNOSTIC POP-UP YOU REQUESTED
-            alert(`SUPABASE REJECTED THE SAVE!\n\nStatus Code: ${res.status}\nError Details: ${errText}\n\nWhat this means: The app tried to save your text, but your Supabase Database actively blocked it. Check your API Keys, Bucket Name, and RLS Permissions.`);
-        }
-    } catch(err) {
-        document.getElementById('cloudStatus').innerText = "SAVE ERROR.";
+        if (!silent) document.getElementById('cloudStatus').innerText = "SAVING TO DATABASE...";
         
-        // THIS CATCHES IF THE APP CANT EVEN REACH SUPABASE
-        alert(`NETWORK CONNECTION ERROR!\n\nThe app couldn't even reach Supabase to attempt the save.\n\nError Details: ${err.message}\n\nWhat this means: You either have no internet, or the Supabase URL in your Settings is incorrect/broken.`);
-    }
-    
-    updateCounters();
+        const payload = {
+            schedule: appData.schedule,
+            saved_tags: appData.savedTags,
+            stash: appData.stash,
+            slots: appData.slots
+        };
+
+        try {
+            await fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
+                method: 'PATCH',
+                headers: { 
+                    'apikey': dbConfig.key, 
+                    'Authorization': `Bearer ${dbConfig.key}`, 
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!silent) document.getElementById('cloudStatus').innerText = "(★) QUEUE SAVED";
+        } catch (err) {
+            if (!silent) document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
+        }
+    }, 500);
 }
 
 function updateCaptionTextLocally(id, text) {
@@ -137,8 +106,7 @@ function updateCaptionTextLocally(id, text) {
     updateCounters();
 }
 
-// --- NEW ROBUST DIAGNOSTIC SAVE FOR INDIVIDUAL CAPTIONS ---
-async function saveCaptionManually(event, id) {
+function saveCaptionManually(event, id) {
     const el = document.getElementById(`caption-${id}`);
     if(el) {
         if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
@@ -149,40 +117,78 @@ async function saveCaptionManually(event, id) {
     btn.innerText = "Saving...";
     document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
     
-    try {
-        const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
-        const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
-            method: 'POST',
-            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
-            body: blob
-        });
+    const payload = { slots: appData.slots };
 
+    fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
+        method: 'PATCH',
+        headers: { 
+            'apikey': dbConfig.key, 
+            'Authorization': `Bearer ${dbConfig.key}`, 
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(payload)
+    }).then(res => {
         if(res.ok) {
             document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
             btn.innerText = "✓ Saved!";
             setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
+            hydrateSlotUI(id);
         } else {
-            const errText = await res.text();
             document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
-            btn.innerText = "❌ DB Error";
-            setTimeout(() => btn.innerText = "💾 Save Caption", 3000);
-            
-            // THIS IS THE DIAGNOSTIC POP-UP YOU REQUESTED
-            alert(`SUPABASE REJECTED THE SAVE!\n\nStatus Code: ${res.status}\nError Details: ${errText}\n\nWhat this means: The app tried to save your text, but your Supabase Database actively blocked it. Check your API Keys, Bucket Name, and RLS Permissions.`);
+            btn.innerText = "❌ Error";
+            setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
         }
-    } catch(err) {
-        document.getElementById('cloudStatus').innerText = "SAVE ERROR.";
-        btn.innerText = "❌ Net Error";
-        setTimeout(() => btn.innerText = "💾 Save Caption", 3000);
-        
-        // THIS CATCHES IF THE APP CANT EVEN REACH SUPABASE
-        alert(`NETWORK CONNECTION ERROR!\n\nThe app couldn't even reach Supabase to attempt the save.\n\nError Details: ${err.message}\n\nWhat this means: You either have no internet, or the Supabase URL in your Settings is incorrect/broken.`);
-    }
-    
-    hydrateSlotUI(id);
+    });
 }
 
-// RAW ARRAY BUFFER UPLOAD
+function forceSaveDrafts() {
+    if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
+        document.activeElement.blur(); 
+    }
+    
+    document.querySelectorAll('.caption-box').forEach(el => {
+        const id = el.id.replace('caption-', '');
+        if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
+        appData.slots[id].caption = el.value;
+    });
+
+    document.getElementById('cloudStatus').innerText = "SAVING ALL DRAFTS...";
+    clearTimeout(queueSyncTimeout); 
+    
+    const payload = {
+        schedule: appData.schedule,
+        saved_tags: appData.savedTags,
+        stash: appData.stash,
+        slots: appData.slots
+    };
+
+    fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
+        method: 'PATCH',
+        headers: { 
+            'apikey': dbConfig.key, 
+            'Authorization': `Bearer ${dbConfig.key}`, 
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(payload)
+    }).then(res => {
+        if(res.ok) {
+            document.getElementById('cloudStatus').innerText = "(★) DRAFTS SAVED TO DATABASE";
+            alert("All photos and captions for all 3 days are securely saved to your Database!");
+        } else {
+            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
+            alert("Failed to save. Check connection.");
+        }
+    });
+    
+    updateCounters();
+}
+
+// --------------------------------------------------------
+// PHOTO VAULT STORAGE ENGINE (Unchanged & Raw)
+// --------------------------------------------------------
+
 async function uploadFileToVault(file) {
     const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
     const fileName = `${Date.now()}_${cleanName}`;
@@ -234,8 +240,16 @@ async function preloadAllImages() {
     }
 }
 
+// --------------------------------------------------------
+// CORE APP LOGIC
+// --------------------------------------------------------
+
 function changeDay(delta) {
-    scrapeCaptionsToMemory(); // Save text to short-term memory before flipping pages
+    document.querySelectorAll('.caption-box').forEach(el => {
+        const id = el.id.replace('caption-', '');
+        if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
+        appData.slots[id].caption = el.value;
+    });
 
     currentDay += delta;
     if(currentDay < 1) currentDay = 1;
