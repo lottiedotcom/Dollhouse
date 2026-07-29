@@ -32,7 +32,7 @@ function getImageInfo(item) {
 }
 
 // --------------------------------------------------------
-// SQL DATABASE SYNC ENGINE (Lightning Fast)
+// SQL DATABASE SYNC ENGINE (With Detailed Error Handling)
 // --------------------------------------------------------
 
 async function initQueue() {
@@ -47,15 +47,18 @@ async function initQueue() {
             cache: 'no-store'
         });
         
-        if (response.ok) {
-            const data = await response.json();
-            if (data && data.length > 0) {
-                const dbState = data[0];
-                appData.schedule = dbState.schedule || appData.schedule;
-                appData.savedTags = dbState.saved_tags || [];
-                appData.stash = dbState.stash || [];
-                appData.slots = dbState.slots || {};
-            }
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Init Load Failed (${response.status}): ${errText}`);
+        }
+
+        const data = await response.json();
+        if (data && data.length > 0) {
+            const dbState = data[0];
+            appData.schedule = dbState.schedule || appData.schedule;
+            appData.savedTags = dbState.saved_tags || [];
+            appData.stash = dbState.stash || [];
+            appData.slots = dbState.slots || {};
         }
 
         document.getElementById('cloudStatus').innerText = "(★) DATABASE SYNCED & SECURE";
@@ -64,6 +67,7 @@ async function initQueue() {
         renderApp();
     } catch (err) {
         console.error("Database Sync Error:", err);
+        alert(`Database Init Error:\n\n${err.message}`);
         document.getElementById('cloudStatus').innerText = "DATABASE CONNECTION ERROR.";
     }
 }
@@ -83,7 +87,7 @@ function saveQueueToCloud(silent = false) {
         };
 
         try {
-            await fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
+            const res = await fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
                 method: 'PATCH',
                 headers: { 
                     'apikey': dbConfig.key, 
@@ -93,19 +97,30 @@ function saveQueueToCloud(silent = false) {
                 },
                 body: JSON.stringify(payload)
             });
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Auto-Save Failed (${res.status}): ${errText}`);
+            }
+
             if (!silent) document.getElementById('cloudStatus').innerText = "(★) QUEUE SAVED";
         } catch (err) {
-            if (!silent) document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
+            if (!silent) {
+                document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
+                alert(`Auto-Save Error:\n\n${err.message}`);
+            }
         }
     }, 500);
 }
 
+// LOCAL-ONLY TEXT EDITING (Does not force save on every keystroke)
 function updateCaptionTextLocally(id, text) {
     if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
     appData.slots[id].caption = text;
     updateCounters();
 }
 
+// INDEPENDENT MANUAL CAPTION SAVE BUTTON
 function saveCaptionManually(event, id) {
     const el = document.getElementById(`caption-${id}`);
     if(el) {
@@ -115,7 +130,7 @@ function saveCaptionManually(event, id) {
     
     const btn = event.target;
     btn.innerText = "Saving...";
-    document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
+    document.getElementById('cloudStatus').innerText = "SAVING CAPTION TO DB...";
     
     const payload = { slots: appData.slots };
 
@@ -128,65 +143,28 @@ function saveCaptionManually(event, id) {
             'Prefer': 'return=minimal'
         },
         body: JSON.stringify(payload)
-    }).then(res => {
+    }).then(async res => {
         if(res.ok) {
             document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
             btn.innerText = "✓ Saved!";
             setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
             hydrateSlotUI(id);
         } else {
+            const errText = await res.text();
             document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
             btn.innerText = "❌ Error";
+            alert(`Caption Save Error (${res.status}):\n\n${errText}`);
             setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
         }
+    }).catch(err => {
+        btn.innerText = "❌ Network Error";
+        alert(`Caption Network Error:\n\n${err.message}`);
+        setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
     });
-}
-
-function forceSaveDrafts() {
-    if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
-        document.activeElement.blur(); 
-    }
-    
-    document.querySelectorAll('.caption-box').forEach(el => {
-        const id = el.id.replace('caption-', '');
-        if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
-        appData.slots[id].caption = el.value;
-    });
-
-    document.getElementById('cloudStatus').innerText = "SAVING ALL DRAFTS...";
-    clearTimeout(queueSyncTimeout); 
-    
-    const payload = {
-        schedule: appData.schedule,
-        saved_tags: appData.savedTags,
-        stash: appData.stash,
-        slots: appData.slots
-    };
-
-    fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
-        method: 'PATCH',
-        headers: { 
-            'apikey': dbConfig.key, 
-            'Authorization': `Bearer ${dbConfig.key}`, 
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(payload)
-    }).then(res => {
-        if(res.ok) {
-            document.getElementById('cloudStatus').innerText = "(★) DRAFTS SAVED TO DATABASE";
-            alert("All photos and captions for all 3 days are securely saved to your Database!");
-        } else {
-            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
-            alert("Failed to save. Check connection.");
-        }
-    });
-    
-    updateCounters();
 }
 
 // --------------------------------------------------------
-// PHOTO VAULT STORAGE ENGINE (Unchanged & Raw)
+// PHOTO VAULT STORAGE ENGINE (With Exact Error Reporting)
 // --------------------------------------------------------
 
 async function uploadFileToVault(file) {
@@ -208,7 +186,7 @@ async function uploadFileToVault(file) {
 
     if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Upload rejected (${res.status}): ${errText}`);
+        throw new Error(`Vault Upload Rejected (${res.status}): ${errText}`);
     }
 
     loadedImages[fileName] = URL.createObjectURL(file);
@@ -234,14 +212,14 @@ async function preloadAllImages() {
                     loadedImages[fileName] = URL.createObjectURL(blob);
                 }
             } catch (e) {
-                console.error("Failed to load image:", fileName);
+                console.error("Failed to load image from vault:", fileName);
             }
         }
     }
 }
 
 // --------------------------------------------------------
-// CORE APP LOGIC
+// CORE APP LOGIC & UI RENDERING
 // --------------------------------------------------------
 
 function changeDay(delta) {
@@ -367,7 +345,7 @@ async function uploadDirectToSlot(event, id) {
             const fileName = await uploadFileToVault(file);
             appData.slots[id].images.push({ vaultKey: fileName, originalName: file.name, tag: 'Direct' });
         } catch(e) {
-            alert(`Failed to upload ${file.name}: ${e.message}`);
+            alert(`Direct Slot Upload Error:\n\n${e.message}`);
         }
     }
 
@@ -457,7 +435,7 @@ async function uploadAndSaveTag() {
             appData.stash.push({ vaultKey: fileName, originalName: file.name, tag: tagInput });
             successCount++;
         } catch (err) {
-            alert(`Failed to upload ${file.name}:\n\n${err.message}`);
+            alert(`Stash Upload Error for ${file.name}:\n\n${err.message}`);
         }
     }
 
@@ -569,12 +547,16 @@ async function executeStashDelete() {
     
     document.getElementById('cloudStatus').innerText = "DELETING FROM VAULT...";
     try {
-        await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
+        const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
             method: 'DELETE',
             headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
         });
+        if(!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Vault Delete Failed (${res.status}): ${errText}`);
+        }
     } catch(e) {
-        console.error("Failed to delete file from DB:", info.vaultKey);
+        alert(`Stash Delete Error:\n\n${e.message}`);
     }
     
     appData.stash.splice(currentStashActionIndex, 1);
@@ -669,19 +651,25 @@ async function prepForPost(id) {
                         reader.readAsDataURL(blob);
                     });
                     if (i < data.images.length - 1) await new Promise(resolve => setTimeout(resolve, 3500));
+                } else {
+                    const errText = await response.text();
+                    alert(`Download Error for ${info.originalName} (${response.status}):\n\n${errText}`);
                 }
-            } catch (e) {}
+            } catch (e) {
+                alert(`Download Network Error:\n\n${e.message}`);
+            }
         }
         document.getElementById('cloudStatus').innerText = "(★) VAULT SYNCED & SECURE";
     }
     alert("Caption copied & files downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
 }
 
+// STRICT AUTOMATIC PHOTO CLEANUP (Deletes physical file from Vault AND clears DB)
 async function markAsPosted(id) {
     const data = appData.slots[id];
-    if (!data || !data.images) return clearSlot(id);
+    if (!data || !data.images || data.images.length === 0) return clearSlot(id);
 
-    if(!confirm("Mark posted? This will permanently delete these files from your Supabase Vault database to save space.")) return;
+    if(!confirm("Mark posted? This will permanently delete these files from your Supabase Vault storage bucket AND clear the slot.")) return;
 
     const statusEl = document.getElementById('cloudStatus');
 
@@ -689,24 +677,29 @@ async function markAsPosted(id) {
         const item = data.images[i];
         const info = getImageInfo(item);
         
-        statusEl.innerText = `DELETING ITEM ${i + 1} OF ${data.images.length} FROM VAULT...`;
+        statusEl.innerText = `PURGING ITEM ${i + 1} OF ${data.images.length} FROM VAULT STORAGE...`;
         
         try {
-            await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
+            const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/${info.vaultKey}`, {
                 method: 'DELETE',
                 headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}` }
             });
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Vault Storage Purge Failed (${res.status}): ${errText}`);
+            }
         } catch (err) {
-            console.error("Failed to delete file from DB:", info.vaultKey);
+            alert(`Purge Error on file ${info.vaultKey}:\n\n${err.message}`);
         }
     }
 
-    statusEl.innerText = "(★) FILES PERMANENTLY DELETED";
+    statusEl.innerText = "(★) FILES PERMANENTLY PURGED";
     appData.slots[id] = { images: [], caption: "" };
     
     hydrateSlotUI(id);
     saveQueueToCloud();
-    setTimeout(() => alert("Deleted entirely from Vault & cleared slot (★^O^★)"), 100);
+    setTimeout(() => alert("Photos completely wiped from Vault Storage & slot cleared! (★^O^★)"), 100);
 }
 
 function openSettings() {
