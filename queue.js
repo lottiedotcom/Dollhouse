@@ -118,7 +118,7 @@ function updateCaptionTextLocally(id, text) {
     updateCounters();
 }
 
-// INDIVIDUAL SAVE BUTTON LOGIC (Emoji Safe)
+// INDIVIDUAL SAVE BUTTON LOGIC (With Progress Bar & Explicit Error Alerts)
 function saveCaptionManually(event, id) {
     const el = document.getElementById(`caption-${id}`);
     if(el) {
@@ -132,6 +132,13 @@ function saveCaptionManually(event, id) {
     btn.innerText = "Saving...";
     document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
     
+    const pContainer = document.getElementById('globalProgressContainer');
+    const pBar = document.getElementById('globalProgressBar');
+    if (pContainer && pBar) {
+        pContainer.style.display = 'block';
+        pBar.style.width = '30%';
+    }
+    
     fetch(upstashConfig.url, {
         method: 'POST',
         headers: { 
@@ -140,18 +147,38 @@ function saveCaptionManually(event, id) {
         },
         body: JSON.stringify(["SET", "queue_app_data", JSON.stringify(appData)])
     }).then(async res => {
+        if (pBar) pBar.style.width = '80%';
+        
         if(res.ok) {
+            const json = await res.json();
+            
+            // Catch Upstash-specific logical errors even if the HTTP response is 200 OK
+            if (json.error) {
+                throw new Error(`Upstash returned an error: ${json.error}`);
+            }
+
+            if (pBar) pBar.style.width = '100%';
             document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
             btn.innerText = "✓ Saved!";
-            setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
+            
+            setTimeout(() => {
+                btn.innerText = "💾 Save Caption";
+                if (pContainer) pContainer.style.display = 'none';
+            }, 2000);
+            
         } else {
-            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
-            btn.innerText = "❌ Error";
-            setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
+            const errText = await res.text();
+            throw new Error(`Upstash API Error (${res.status}): ${errText}`);
         }
     }).catch(err => {
-        btn.innerText = "❌ Network Error";
-        setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
+        if (pContainer) pContainer.style.display = 'none';
+        document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
+        btn.innerText = "❌ Error";
+        
+        // Detailed popup explaining exactly why it failed
+        alert(`Could not save caption to Upstash.\n\nReason:\n${err.message}\n\nPlease check your internet connection or Upstash configuration.`);
+        
+        setTimeout(() => btn.innerText = "💾 Save Caption", 3000);
     });
 }
 
