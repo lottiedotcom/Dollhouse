@@ -1,6 +1,3 @@
-// ==========================================
-// 1. UPSTASH (VERCEL KV) CONFIG - SECURE LOCAL PROMPT
-// ==========================================
 let upstashConfig = JSON.parse(localStorage.getItem('upstashConfig'));
 
 if (!upstashConfig || !upstashConfig.url) {
@@ -53,7 +50,7 @@ function getImageInfo(item) {
 }
 
 // --------------------------------------------------------
-// UPSTASH SYNC ENGINE (Text, Emojis & Schedules)
+// UPSTASH SYNC ENGINE (Matches Kaomoji perfectly)
 // --------------------------------------------------------
 
 async function initQueue() {
@@ -65,7 +62,7 @@ async function initQueue() {
             cache: 'no-store'
         });
         
-        if (!response.ok) throw new Error(`Upstash Load Failed (${response.status})`);
+        if (!response.ok) throw new Error(`Init Failed (${response.status})`);
 
         const json = await response.json();
         if (json.result) {
@@ -86,7 +83,6 @@ async function initQueue() {
     }
 }
 
-// Silent background auto-saver for stash movements
 function saveQueueToCloud(silent = false) {
     if (!silent) updateCounters();
     clearTimeout(queueSyncTimeout);
@@ -97,10 +93,7 @@ function saveQueueToCloud(silent = false) {
         try {
             await fetch(`${KV_URL}/set/queue_app_data`, {
                 method: 'POST',
-                headers: { 
-                    'Authorization': `Bearer ${KV_TOKEN}`,
-                    'Content-Type': 'application/json' 
-                },
+                headers: { 'Authorization': `Bearer ${KV_TOKEN}` },
                 body: JSON.stringify(appData)
             });
             if (!silent) document.getElementById('cloudStatus').innerText = "(★) QUEUE SAVED";
@@ -110,23 +103,22 @@ function saveQueueToCloud(silent = false) {
     }, 500);
 }
 
-// Memory lock: keeps text safe when switching days
 function updateCaptionTextLocally(id, text) {
     if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
     appData.slots[id].caption = text;
     updateCounters();
 }
 
-// INDIVIDUAL SAVE BUTTON LOGIC (With Progress Bar & Explicit Error Alerts)
-function saveCaptionManually(event, id) {
+// --------------------------------------------------------
+// INDIVIDUAL CAPTION SAVE (Direct Upstash REST Endpoint)
+// --------------------------------------------------------
+
+async function saveCaptionManually(event, id) {
+    // 1. Force read the exact text box right now
     const el = document.getElementById(`caption-${id}`);
-    if(el) {
-        if (!appData.slots[id]) {
-            appData.slots[id] = { images: [], caption: "" };
-        }
-        appData.slots[id].caption = el.value;
-    }
-    
+    if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
+    if (el) appData.slots[id].caption = el.value;
+
     const btn = event.target;
     btn.innerText = "Saving...";
     document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
@@ -136,35 +128,31 @@ function saveCaptionManually(event, id) {
     
     if (pContainer && pBar) {
         pContainer.style.display = 'block';
-        pBar.style.width = '30%';
+        pBar.style.width = '40%';
     }
     
-    fetch(`${KV_URL}/set/queue_app_data`, {
-        method: 'POST',
-        headers: { 
-            'Authorization': `Bearer ${KV_TOKEN}`,
-            'Content-Type': 'application/json' 
-        },
-        body: JSON.stringify(appData)
-    }).then(async res => {
-        if (pBar) pBar.style.width = '70%';
+    try {
+        // 2. Exact same fetch mechanism as Kaomoji
+        const response = await fetch(`${KV_URL}/set/queue_app_data`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${KV_TOKEN}` },
+            body: JSON.stringify(appData)
+        });
+
+        if (pBar) pBar.style.width = '80%';
         
-        if(!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Upstash HTTP Error (${res.status}): ${errText}`);
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Upstash HTTP ${response.status}: ${errText}`);
         }
         
-        const json = await res.json();
+        const json = await response.json();
         
-        // Strict Validation: Ensure Upstash actually executed the command
         if (json.error) {
-            throw new Error(`Upstash API Error: ${json.error}`);
-        }
-        if (json.result !== "OK" && json.result !== true) {
-            throw new Error(`Upstash rejected the save. Output: ${JSON.stringify(json)}`);
+            throw new Error(`Upstash Error: ${json.error}`);
         }
 
-        // Only true success makes it here
+        // 3. Success
         if (pBar) pBar.style.width = '100%';
         document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
         btn.innerText = "✓ Saved!";
@@ -174,14 +162,14 @@ function saveCaptionManually(event, id) {
             if (pContainer) pContainer.style.display = 'none';
         }, 1500);
         
-    }).catch(err => {
+    } catch (err) {
         if (pContainer) pContainer.style.display = 'none';
         document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
         btn.innerText = "❌ Error";
         
-        alert(`FAILED TO SAVE CAPTION!\n\nReason:\n${err.message}\n\nPlease check your internet connection or Upstash keys.`);
+        alert(`FAILED TO SAVE CAPTION!\n\nReason: ${err.message}\n\nPlease check your keys or internet.`);
         setTimeout(() => btn.innerText = "💾 Save Caption", 3000);
-    });
+    }
 }
 
 // --------------------------------------------------------
@@ -281,7 +269,7 @@ function renderApp() {
     appData.schedule.sort();
     const schedContainer = document.getElementById('scheduled-container');
     
-    // FIX: Render entire block at once so slots don't overwrite each other
+    // Build the entire DOM string at once to prevent inputs wiping themselves
     let htmlContent = '';
     appData.schedule.forEach((time, index) => {
         const id = `d${currentDay}-sched-${index}`;
@@ -290,7 +278,6 @@ function renderApp() {
     
     schedContainer.innerHTML = htmlContent;
 
-    // Hydrate only after everything is safely locked in the DOM
     appData.schedule.forEach((time, index) => {
         const id = `d${currentDay}-sched-${index}`;
         hydrateSlotUI(id);
@@ -309,6 +296,7 @@ function createSlotHTML(id, title) {
             
             <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here..." oninput="updateCaptionTextLocally('${id}', this.value)"></textarea>
             
+            <!-- Per-Slot Progress Bar -->
             <div id="prog-container-${id}" style="display: none; width: 100%; height: 6px; background: #ffe4e1; margin-bottom: 10px; border-radius: 3px; overflow: hidden; border: 1px solid var(--baby-blue);">
                 <div id="prog-bar-${id}" style="width: 0%; height: 100%; background: var(--hot-pink); transition: width 0.3s;"></div>
             </div>
