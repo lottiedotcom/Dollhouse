@@ -3,7 +3,6 @@
 // ==========================================
 let upstashConfig = JSON.parse(localStorage.getItem('upstashConfig'));
 
-// Auto-prompt for Upstash keys if missing
 if (!upstashConfig || !upstashConfig.url) {
     const url = prompt("Enter your Upstash REST URL:");
     const token = prompt("Enter your Upstash REST Token:");
@@ -48,13 +47,8 @@ function getImageInfo(item) {
     return { vaultKey, originalName, tag: 'Untagged' };
 }
 
-// --------------------------------------------------------
-// UPSTASH SYNC ENGINE (Text, Emojis & Schedules)
-// --------------------------------------------------------
-
 async function initQueue() {
     document.getElementById('cloudStatus').innerText = "CONNECTING TO UPSTASH...";
-    
     try {
         const response = await fetch(upstashConfig.url, {
             method: 'POST',
@@ -78,7 +72,6 @@ async function initQueue() {
         }
 
         document.getElementById('cloudStatus').innerText = "(★) UPSTASH SYNCED & SECURE";
-        
         await preloadAllImages();
         renderApp();
     } catch (err) {
@@ -87,14 +80,12 @@ async function initQueue() {
     }
 }
 
-// Silent background auto-saver for stash movements
 function saveQueueToCloud(silent = false) {
     if (!silent) updateCounters();
     clearTimeout(queueSyncTimeout);
     
     queueSyncTimeout = setTimeout(async () => {
         if (!silent) document.getElementById('cloudStatus').innerText = "SAVING TO UPSTASH...";
-        
         try {
             await fetch(upstashConfig.url, {
                 method: 'POST',
@@ -111,14 +102,12 @@ function saveQueueToCloud(silent = false) {
     }, 500);
 }
 
-// Memory lock: keeps text safe when switching days
 function updateCaptionTextLocally(id, text) {
     if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
     appData.slots[id].caption = text;
     updateCounters();
 }
 
-// INDIVIDUAL SAVE BUTTON LOGIC (With Progress Bar & Explicit Error Alerts)
 function saveCaptionManually(event, id) {
     const el = document.getElementById(`caption-${id}`);
     if(el) {
@@ -132,8 +121,10 @@ function saveCaptionManually(event, id) {
     btn.innerText = "Saving...";
     document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
     
-    const pContainer = document.getElementById('globalProgressContainer');
-    const pBar = document.getElementById('globalProgressBar');
+    // Find the specific progress bar for this slot
+    const pContainer = document.getElementById(`prog-container-${id}`);
+    const pBar = document.getElementById(`prog-bar-${id}`);
+    
     if (pContainer && pBar) {
         pContainer.style.display = 'block';
         pBar.style.width = '30%';
@@ -147,44 +138,42 @@ function saveCaptionManually(event, id) {
         },
         body: JSON.stringify(["SET", "queue_app_data", JSON.stringify(appData)])
     }).then(async res => {
-        if (pBar) pBar.style.width = '80%';
+        if (pBar) pBar.style.width = '70%';
         
-        if(res.ok) {
-            const json = await res.json();
-            
-            // Catch Upstash-specific logical errors even if the HTTP response is 200 OK
-            if (json.error) {
-                throw new Error(`Upstash returned an error: ${json.error}`);
-            }
-
-            if (pBar) pBar.style.width = '100%';
-            document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
-            btn.innerText = "✓ Saved!";
-            
-            setTimeout(() => {
-                btn.innerText = "💾 Save Caption";
-                if (pContainer) pContainer.style.display = 'none';
-            }, 2000);
-            
-        } else {
+        if(!res.ok) {
             const errText = await res.text();
-            throw new Error(`Upstash API Error (${res.status}): ${errText}`);
+            throw new Error(`Upstash HTTP Error (${res.status}): ${errText}`);
         }
+        
+        const json = await res.json();
+        
+        // Strict Validation: Ensure Upstash actually executed the command
+        if (json.error) {
+            throw new Error(`Upstash API Error: ${json.error}`);
+        }
+        if (json.result !== "OK") {
+            throw new Error(`Upstash rejected the save. Output: ${JSON.stringify(json)}`);
+        }
+
+        // Only true success makes it here
+        if (pBar) pBar.style.width = '100%';
+        document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
+        btn.innerText = "✓ Saved!";
+        
+        setTimeout(() => {
+            btn.innerText = "💾 Save Caption";
+            if (pContainer) pContainer.style.display = 'none';
+        }, 1500);
+        
     }).catch(err => {
         if (pContainer) pContainer.style.display = 'none';
         document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
         btn.innerText = "❌ Error";
         
-        // Detailed popup explaining exactly why it failed
-        alert(`Could not save caption to Upstash.\n\nReason:\n${err.message}\n\nPlease check your internet connection or Upstash configuration.`);
-        
+        alert(`Failed to save caption!\n\nReason:\n${err.message}\n\nPlease check your internet connection or Upstash keys.`);
         setTimeout(() => btn.innerText = "💾 Save Caption", 3000);
     });
 }
-
-// --------------------------------------------------------
-// SUPABASE STORAGE ENGINE (Photos Only)
-// --------------------------------------------------------
 
 async function uploadFileToVault(file) {
     const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
@@ -237,12 +226,7 @@ async function preloadAllImages() {
     }
 }
 
-// --------------------------------------------------------
-// CORE APP LOGIC & UI RENDERING
-// --------------------------------------------------------
-
 function changeDay(delta) {
-    // Scrape all text boxes before flipping the page
     document.querySelectorAll('.caption-box').forEach(el => {
         const id = el.id.replace('caption-', '');
         if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
@@ -299,6 +283,12 @@ function createSlotHTML(id, title) {
             <div class="slot-gallery" id="gallery-${id}" style="display: none;"></div>
             
             <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here..." oninput="updateCaptionTextLocally('${id}', this.value)"></textarea>
+            
+            <!-- LOCAL PROGRESS BAR (Directly under the text box) -->
+            <div id="prog-container-${id}" style="display: none; width: 100%; height: 6px; background: #ffe4e1; margin-bottom: 10px; border-radius: 3px; overflow: hidden; border: 1px solid var(--baby-blue);">
+                <div id="prog-bar-${id}" style="width: 0%; height: 100%; background: var(--hot-pink); transition: width 0.3s;"></div>
+            </div>
+
             <button class="action-btn" style="background: var(--baby-blue); border-color: var(--dark-blue); margin-bottom: 10px; margin-top: 0;" onclick="saveCaptionManually(event, '${id}')">💾 Save Caption</button>
             
             <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
