@@ -65,7 +65,6 @@ async function initQueue() {
     }
 }
 
-// Background auto-save for queue movements (photos)
 function saveQueueToCloud() {
     updateCounters();
     clearTimeout(queueSyncTimeout);
@@ -77,13 +76,14 @@ function saveQueueToCloud() {
                 headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
                 body: blob
             });
+            document.getElementById('cloudStatus').innerText = "(★) QUEUE SAVED";
         } catch (err) {
-            console.error("Queue Save Failed", err);
+            document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
+            console.error("Background Save Error:", err);
         }
     }, 1000);
 }
 
-// Scrape current text from screen into app memory so it doesn't get lost
 function scrapeCaptionsToMemory() {
     document.querySelectorAll('.caption-box').forEach(el => {
         const id = el.id.replace('caption-', '');
@@ -92,80 +92,94 @@ function scrapeCaptionsToMemory() {
     });
 }
 
-// --- NEW STRICT DAY-CAPTION SAVE FUNCTION WITH POP-UP ERRORS ---
-async function saveCurrentDayCaptions() {
-    // Drop keyboard
+// --- NEW ROBUST DIAGNOSTIC SAVE FOR DRAFTS ---
+async function forceSaveDrafts() {
     if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
         document.activeElement.blur(); 
     }
     
-    scrapeCaptionsToMemory(); // Secure text into JS object
-    
-    document.getElementById('cloudStatus').innerText = "SAVING CAPTIONS...";
-    
-    try {
-        const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
-        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
-            method: 'POST',
-            headers: { 
-                'apikey': dbConfig.key, 
-                'Authorization': `Bearer ${dbConfig.key}`, 
-                'Content-Type': 'application/json', 
-                'x-upsert': 'true' 
-            },
-            body: blob
-        });
-
-        if (!response.ok) {
-            const errorDetails = await response.text();
-            alert(`❌ CAPTION SAVE FAILED!\n\nHTTP Status Code: ${response.status}\nError Details: ${errorDetails}\n\nMake sure your Supabase Vault hasn't reached its storage limit or locked your API key.`);
-            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
-            return;
-        }
-
-        document.getElementById('cloudStatus').innerText = "(★) CAPTIONS SECURED";
-        alert(`✅ Captions for Day ${currentDay} have been successfully saved to your Vault!`);
-        updateCounters();
-        
-    } catch (err) {
-        alert(`❌ CRITICAL NETWORK ERROR!\n\nDetails: ${err.message}\n\nThe app could not reach Supabase. Please check your internet connection.`);
-        document.getElementById('cloudStatus').innerText = "NETWORK ERROR.";
-    }
-}
-
-// Global Draft Save (Failsafe)
-function forceSaveDrafts() {
-    if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
-        document.activeElement.blur(); 
-    }
     scrapeCaptionsToMemory();
 
     document.getElementById('cloudStatus').innerText = "SAVING DRAFTS...";
     clearTimeout(queueSyncTimeout); 
     
-    const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
-    fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
-        method: 'POST',
-        headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
-        body: blob
-    }).then(res => {
+    try {
+        const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+        const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
+            method: 'POST',
+            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
+            body: blob
+        });
+
         if(res.ok) {
-            document.getElementById('cloudStatus').innerText = "(★) SYNC COMPLETE";
+            document.getElementById('cloudStatus').innerText = "(★) DRAFTS SAVED TO VAULT";
+            alert("SUCCESS: All photos and captions for all 3 days are securely saved to your Vault!");
         } else {
+            const errText = await res.text();
             document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
-            alert("Failed to sync entire state. Check connection.");
+            
+            // THIS IS THE DIAGNOSTIC POP-UP YOU REQUESTED
+            alert(`SUPABASE REJECTED THE SAVE!\n\nStatus Code: ${res.status}\nError Details: ${errText}\n\nWhat this means: The app tried to save your text, but your Supabase Database actively blocked it. Check your API Keys, Bucket Name, and RLS Permissions.`);
         }
-    }).catch(err => {
+    } catch(err) {
         document.getElementById('cloudStatus').innerText = "SAVE ERROR.";
-    });
+        
+        // THIS CATCHES IF THE APP CANT EVEN REACH SUPABASE
+        alert(`NETWORK CONNECTION ERROR!\n\nThe app couldn't even reach Supabase to attempt the save.\n\nError Details: ${err.message}\n\nWhat this means: You either have no internet, or the Supabase URL in your Settings is incorrect/broken.`);
+    }
     
     updateCounters();
 }
 
-// Keep short-term memory alive as user types
 function updateCaptionTextLocally(id, text) {
     if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
     appData.slots[id].caption = text;
+    updateCounters();
+}
+
+// --- NEW ROBUST DIAGNOSTIC SAVE FOR INDIVIDUAL CAPTIONS ---
+async function saveCaptionManually(event, id) {
+    const el = document.getElementById(`caption-${id}`);
+    if(el) {
+        if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
+        appData.slots[id].caption = el.value;
+    }
+    
+    const btn = event.target;
+    btn.innerText = "Saving...";
+    document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
+    
+    try {
+        const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+        const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
+            method: 'POST',
+            headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
+            body: blob
+        });
+
+        if(res.ok) {
+            document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
+            btn.innerText = "✓ Saved!";
+            setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
+        } else {
+            const errText = await res.text();
+            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
+            btn.innerText = "❌ DB Error";
+            setTimeout(() => btn.innerText = "💾 Save Caption", 3000);
+            
+            // THIS IS THE DIAGNOSTIC POP-UP YOU REQUESTED
+            alert(`SUPABASE REJECTED THE SAVE!\n\nStatus Code: ${res.status}\nError Details: ${errText}\n\nWhat this means: The app tried to save your text, but your Supabase Database actively blocked it. Check your API Keys, Bucket Name, and RLS Permissions.`);
+        }
+    } catch(err) {
+        document.getElementById('cloudStatus').innerText = "SAVE ERROR.";
+        btn.innerText = "❌ Net Error";
+        setTimeout(() => btn.innerText = "💾 Save Caption", 3000);
+        
+        // THIS CATCHES IF THE APP CANT EVEN REACH SUPABASE
+        alert(`NETWORK CONNECTION ERROR!\n\nThe app couldn't even reach Supabase to attempt the save.\n\nError Details: ${err.message}\n\nWhat this means: You either have no internet, or the Supabase URL in your Settings is incorrect/broken.`);
+    }
+    
+    hydrateSlotUI(id);
 }
 
 // RAW ARRAY BUFFER UPLOAD
@@ -221,17 +235,12 @@ async function preloadAllImages() {
 }
 
 function changeDay(delta) {
-    scrapeCaptionsToMemory(); // Secure text before changing day
+    scrapeCaptionsToMemory(); // Save text to short-term memory before flipping pages
 
     currentDay += delta;
     if(currentDay < 1) currentDay = 1;
     if(currentDay > 3) currentDay = 3;
-    
-    // Update labels
     document.getElementById('dayDisplay').innerText = `Day ${currentDay}`;
-    const saveBtn = document.getElementById('btn-save-day-captions');
-    if(saveBtn) saveBtn.innerText = `💾 Save Day ${currentDay} Captions`;
-    
     renderApp();
 }
 
@@ -279,6 +288,7 @@ function createSlotHTML(id, title) {
             <div class="slot-gallery" id="gallery-${id}" style="display: none;"></div>
             
             <textarea class="caption-box" id="caption-${id}" placeholder="Type your caption here..." oninput="updateCaptionTextLocally('${id}', this.value)"></textarea>
+            <button class="action-btn" style="background: var(--baby-blue); border-color: var(--dark-blue); margin-bottom: 10px; margin-top: 0;" onclick="saveCaptionManually(event, '${id}')">💾 Save Caption</button>
             
             <div id="btnGroup-${id}" style="display: none; flex-direction: column; gap: 5px;">
                 <button class="action-btn" onclick="prepForPost('${id}')">(ﾉ◕ヮ◕)ﾉ Download Photos & Copy Caption</button>
