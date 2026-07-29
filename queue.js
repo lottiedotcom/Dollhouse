@@ -1,3 +1,9 @@
+// ==========================================
+// 1. UPSTASH (VERCEL KV) CONFIG - FOR TEXT/CAPTION DATABASE
+// ==========================================
+const UPSTASH_URL = "https://YOUR_UPSTASH_URL.upstash.io";
+const UPSTASH_TOKEN = "YOUR_UPSTASH_TOKEN";
+
 let queueSyncTimeout;
 let currentDay = 1;
 let currentStashFilter = 'All';
@@ -12,21 +18,6 @@ let appData = {
 };
 
 let loadedImages = {};
-
-// Load configs
-let upstashConfig = JSON.parse(localStorage.getItem('upstashConfig'));
-
-// Auto-prompt for Upstash keys if missing
-if (!upstashConfig || !upstashConfig.url) {
-    const url = prompt("Enter your Upstash REST URL:");
-    const token = prompt("Enter your Upstash REST Token:");
-    if (url && token) {
-        upstashConfig = { url: url.replace(/\/$/, ''), token };
-        localStorage.setItem('upstashConfig', JSON.stringify(upstashConfig));
-    } else {
-        alert("Upstash keys are required to save captions. Refresh to try again.");
-    }
-}
 
 function getImageInfo(item) {
     if (!item) return { vaultKey: '', originalName: '', tag: 'Untagged' };
@@ -47,15 +38,20 @@ function getImageInfo(item) {
 }
 
 // --------------------------------------------------------
-// UPSTASH REDIS SYNC ENGINE (Text & Schedules)
+// UPSTASH SYNC ENGINE (Text, Emojis & Schedules)
 // --------------------------------------------------------
 
 async function initQueue() {
     document.getElementById('cloudStatus').innerText = "CONNECTING TO UPSTASH...";
     
     try {
-        const response = await fetch(`${upstashConfig.url}/get/queue_app_data`, {
-            headers: { 'Authorization': `Bearer ${upstashConfig.token}` },
+        const response = await fetch(UPSTASH_URL, {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify(["GET", "queue_app_data"]),
             cache: 'no-store'
         });
         
@@ -76,11 +72,11 @@ async function initQueue() {
         renderApp();
     } catch (err) {
         console.error("Upstash Sync Error:", err);
-        alert(`Upstash Init Error:\n\n${err.message}`);
         document.getElementById('cloudStatus').innerText = "UPSTASH CONNECTION ERROR.";
     }
 }
 
+// Silent background auto-saver for stash movements
 function saveQueueToCloud(silent = false) {
     if (!silent) updateCounters();
     clearTimeout(queueSyncTimeout);
@@ -89,29 +85,29 @@ function saveQueueToCloud(silent = false) {
         if (!silent) document.getElementById('cloudStatus').innerText = "SAVING TO UPSTASH...";
         
         try {
-            const res = await fetch(`${upstashConfig.url}/set/queue_app_data`, {
+            await fetch(UPSTASH_URL, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${upstashConfig.token}` },
-                body: JSON.stringify(appData)
+                headers: { 
+                    'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+                    'Content-Type': 'application/json' 
+                },
+                body: JSON.stringify(["SET", "queue_app_data", JSON.stringify(appData)])
             });
-
-            if (!res.ok) throw new Error(`Upstash Save Failed (${res.status})`);
             if (!silent) document.getElementById('cloudStatus').innerText = "(★) QUEUE SAVED";
         } catch (err) {
-            if (!silent) {
-                document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
-                alert(`Upstash Auto-Save Error:\n\n${err.message}`);
-            }
+            if (!silent) document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
         }
     }, 500);
 }
 
+// Memory lock: keeps text safe when switching days
 function updateCaptionTextLocally(id, text) {
     if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
     appData.slots[id].caption = text;
     updateCounters();
 }
 
+// INDIVIDUAL SAVE BUTTON LOGIC (Emoji Safe)
 function saveCaptionManually(event, id) {
     const el = document.getElementById(`caption-${id}`);
     if(el) {
@@ -123,34 +119,33 @@ function saveCaptionManually(event, id) {
     
     const btn = event.target;
     btn.innerText = "Saving...";
-    document.getElementById('cloudStatus').innerText = "SAVING CAPTION TO UPSTASH...";
+    document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
     
-    fetch(`${upstashConfig.url}/set/queue_app_data`, {
+    fetch(UPSTASH_URL, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${upstashConfig.token}` },
-        body: JSON.stringify(appData)
+        headers: { 
+            'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+            'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify(["SET", "queue_app_data", JSON.stringify(appData)])
     }).then(async res => {
         if(res.ok) {
             document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
             btn.innerText = "✓ Saved!";
             setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
-            hydrateSlotUI(id);
         } else {
-            const errText = await res.text();
             document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
             btn.innerText = "❌ Error";
-            alert(`Upstash Caption Save Error (${res.status}):\n\n${errText}`);
             setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
         }
     }).catch(err => {
         btn.innerText = "❌ Network Error";
-        alert(`Upstash Network Error:\n\n${err.message}`);
         setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
     });
 }
 
 // --------------------------------------------------------
-// SUPABASE VAULT STORAGE ENGINE (Photos Only)
+// SUPABASE STORAGE ENGINE (Photos Only)
 // --------------------------------------------------------
 
 async function uploadFileToVault(file) {
@@ -198,7 +193,7 @@ async function preloadAllImages() {
                     loadedImages[fileName] = URL.createObjectURL(blob);
                 }
             } catch (e) {
-                console.error("Failed to load image from vault:", fileName);
+                console.error("Failed to load image:", fileName);
             }
         }
     }
@@ -209,12 +204,11 @@ async function preloadAllImages() {
 // --------------------------------------------------------
 
 function changeDay(delta) {
+    // Scrape all text boxes before flipping the page
     document.querySelectorAll('.caption-box').forEach(el => {
         const id = el.id.replace('caption-', '');
-        if (el.value.trim() !== "") {
-            if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
-            appData.slots[id].caption = el.value;
-        }
+        if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
+        appData.slots[id].caption = el.value;
     });
 
     currentDay += delta;
@@ -240,7 +234,6 @@ function updateCounters() {
 
     const header = document.getElementById('headerCounters');
     if(header) header.innerHTML = `Stashed: <b>${stashCount}</b> &nbsp;|&nbsp; Slots Filled: <b>${filledSlots}</b> / ${totalSlots}`;
-    
     const stashWarning = document.getElementById('stashWarning');
     if(stashWarning) stashWarning.style.display = stashCount >= 15 ? 'block' : 'none';
 }
@@ -351,7 +344,6 @@ function clearSlot(id) {
         appData.slots[id].images.forEach(imgObj => appData.stash.push(imgObj));
     }
     appData.slots[id] = { images: [], caption: "" }; 
-    
     hydrateSlotUI(id);
     renderStash();
     saveQueueToCloud();
