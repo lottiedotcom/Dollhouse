@@ -65,6 +65,7 @@ async function initQueue() {
     }
 }
 
+// Background auto-save for queue movements (photos)
 function saveQueueToCloud() {
     updateCounters();
     clearTimeout(queueSyncTimeout);
@@ -76,46 +77,35 @@ function saveQueueToCloud() {
                 headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
                 body: blob
             });
-            document.getElementById('cloudStatus').innerText = "(★) QUEUE SAVED";
         } catch (err) {
-            document.getElementById('cloudStatus').innerText = "SAVE FAILED. RETRYING...";
+            console.error("Queue Save Failed", err);
         }
     }, 1000);
 }
 
-// Memory Safety Net: updates data silently as you type so you don't lose anything flipping pages
-function updateCaptionTextLocally(id, text) {
-    if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
-    appData.slots[id].caption = text;
-}
-
-// Scrape Captions specifically for the day currently being viewed
-function scrapeCaptionsForDay(day) {
-    appData.schedule.forEach((time, index) => {
-        const id = `d${day}-sched-${index}`;
-        const el = document.getElementById(`caption-${id}`);
-        if (el) {
-            if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
-            appData.slots[id].caption = el.value;
-        }
+// Scrape current text from screen into app memory so it doesn't get lost
+function scrapeCaptionsToMemory() {
+    document.querySelectorAll('.caption-box').forEach(el => {
+        const id = el.id.replace('caption-', '');
+        if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
+        appData.slots[id].caption = el.value;
     });
 }
 
-// NEW: Manual Day Saver with Explicit Error Logging
-async function saveCaptionsForCurrentDay() {
-    // 1. Force the keyboard to close and scrape the boxes
+// --- NEW STRICT DAY-CAPTION SAVE FUNCTION WITH POP-UP ERRORS ---
+async function saveCurrentDayCaptions() {
+    // Drop keyboard
     if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
         document.activeElement.blur(); 
     }
-    scrapeCaptionsForDay(currentDay);
-
-    const btn = document.getElementById('saveDayCaptionsBtn');
-    if(btn) btn.innerText = "Saving...";
+    
+    scrapeCaptionsToMemory(); // Secure text into JS object
+    
     document.getElementById('cloudStatus').innerText = "SAVING CAPTIONS...";
-
+    
     try {
         const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
-        const res = await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
+        const response = await fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
             method: 'POST',
             headers: { 
                 'apikey': dbConfig.key, 
@@ -126,26 +116,56 @@ async function saveCaptionsForCurrentDay() {
             body: blob
         });
 
-        // Add extreme error catching if Supabase kicks back a rejection
-        if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Server responded with Code ${res.status}: ${errText}`);
+        if (!response.ok) {
+            const errorDetails = await response.text();
+            alert(`❌ CAPTION SAVE FAILED!\n\nHTTP Status Code: ${response.status}\nError Details: ${errorDetails}\n\nMake sure your Supabase Vault hasn't reached its storage limit or locked your API key.`);
+            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
+            return;
         }
 
-        document.getElementById('cloudStatus').innerText = `(★) DAY ${currentDay} CAPTIONS SAVED`;
-        if(btn) btn.innerText = `✓ Saved Day ${currentDay}`;
-        setTimeout(() => { if(btn) btn.innerText = `💾 Save Day ${currentDay} Captions`; }, 2000);
-        
+        document.getElementById('cloudStatus').innerText = "(★) CAPTIONS SECURED";
+        alert(`✅ Captions for Day ${currentDay} have been successfully saved to your Vault!`);
         updateCounters();
-    } catch (err) {
-        console.error("Save Error:", err);
-        document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
-        if(btn) btn.innerText = "❌ Error";
-        setTimeout(() => { if(btn) btn.innerText = `💾 Save Day ${currentDay} Captions`; }, 2000);
         
-        // Alert the exact reason why it failed to write
-        alert(`ERROR SAVING CAPTIONS:\n\n${err.message}\n\nPlease check your internet connection or Supabase storage permissions.`);
+    } catch (err) {
+        alert(`❌ CRITICAL NETWORK ERROR!\n\nDetails: ${err.message}\n\nThe app could not reach Supabase. Please check your internet connection.`);
+        document.getElementById('cloudStatus').innerText = "NETWORK ERROR.";
     }
+}
+
+// Global Draft Save (Failsafe)
+function forceSaveDrafts() {
+    if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') {
+        document.activeElement.blur(); 
+    }
+    scrapeCaptionsToMemory();
+
+    document.getElementById('cloudStatus').innerText = "SAVING DRAFTS...";
+    clearTimeout(queueSyncTimeout); 
+    
+    const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+    fetch(`${dbConfig.url}/storage/v1/object/vault/state.json`, {
+        method: 'POST',
+        headers: { 'apikey': dbConfig.key, 'Authorization': `Bearer ${dbConfig.key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
+        body: blob
+    }).then(res => {
+        if(res.ok) {
+            document.getElementById('cloudStatus').innerText = "(★) SYNC COMPLETE";
+        } else {
+            document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
+            alert("Failed to sync entire state. Check connection.");
+        }
+    }).catch(err => {
+        document.getElementById('cloudStatus').innerText = "SAVE ERROR.";
+    });
+    
+    updateCounters();
+}
+
+// Keep short-term memory alive as user types
+function updateCaptionTextLocally(id, text) {
+    if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
+    appData.slots[id].caption = text;
 }
 
 // RAW ARRAY BUFFER UPLOAD
@@ -201,17 +221,16 @@ async function preloadAllImages() {
 }
 
 function changeDay(delta) {
-    scrapeCaptionsForDay(currentDay); // Save text locally before flipping pages
+    scrapeCaptionsToMemory(); // Secure text before changing day
 
     currentDay += delta;
     if(currentDay < 1) currentDay = 1;
     if(currentDay > 3) currentDay = 3;
     
+    // Update labels
     document.getElementById('dayDisplay').innerText = `Day ${currentDay}`;
-    
-    // Update the Day Saver button dynamically
-    const saveBtn = document.getElementById('saveDayCaptionsBtn');
-    if (saveBtn) saveBtn.innerText = `💾 Save Day ${currentDay} Captions`;
+    const saveBtn = document.getElementById('btn-save-day-captions');
+    if(saveBtn) saveBtn.innerText = `💾 Save Day ${currentDay} Captions`;
     
     renderApp();
 }
@@ -252,7 +271,6 @@ function renderApp() {
     updateCounters();
 }
 
-// Removed the individual save button per user request
 function createSlotHTML(id, title) {
     return `
         <div class="slot" id="slot-${id}">
@@ -272,7 +290,6 @@ function createSlotHTML(id, title) {
 }
 
 function hydrateSlotUI(id) {
-    // Fill in default safely
     const data = appData.slots[id] || { images: [], caption: "" };
     
     const captionEl = document.getElementById(`caption-${id}`);
