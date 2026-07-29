@@ -1,8 +1,19 @@
 // ==========================================
-// 1. UPSTASH (VERCEL KV) CONFIG - FOR TEXT/CAPTION DATABASE
+// 1. UPSTASH (VERCEL KV) CONFIG - SECURE LOCAL PROMPT
 // ==========================================
-const UPSTASH_URL = "https://YOUR_UPSTASH_URL.upstash.io";
-const UPSTASH_TOKEN = "YOUR_UPSTASH_TOKEN";
+let upstashConfig = JSON.parse(localStorage.getItem('upstashConfig'));
+
+// Auto-prompt for Upstash keys if missing
+if (!upstashConfig || !upstashConfig.url) {
+    const url = prompt("Enter your Upstash REST URL:");
+    const token = prompt("Enter your Upstash REST Token:");
+    if (url && token) {
+        upstashConfig = { url: url.replace(/\/$/, ''), token };
+        localStorage.setItem('upstashConfig', JSON.stringify(upstashConfig));
+    } else {
+        alert("Upstash keys are required to save captions. Refresh to try again.");
+    }
+}
 
 let queueSyncTimeout;
 let currentDay = 1;
@@ -45,10 +56,10 @@ async function initQueue() {
     document.getElementById('cloudStatus').innerText = "CONNECTING TO UPSTASH...";
     
     try {
-        const response = await fetch(UPSTASH_URL, {
+        const response = await fetch(upstashConfig.url, {
             method: 'POST',
             headers: { 
-                'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+                'Authorization': `Bearer ${upstashConfig.token}`,
                 'Content-Type': 'application/json' 
             },
             body: JSON.stringify(["GET", "queue_app_data"]),
@@ -85,10 +96,10 @@ function saveQueueToCloud(silent = false) {
         if (!silent) document.getElementById('cloudStatus').innerText = "SAVING TO UPSTASH...";
         
         try {
-            await fetch(UPSTASH_URL, {
+            await fetch(upstashConfig.url, {
                 method: 'POST',
                 headers: { 
-                    'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+                    'Authorization': `Bearer ${upstashConfig.token}`,
                     'Content-Type': 'application/json' 
                 },
                 body: JSON.stringify(["SET", "queue_app_data", JSON.stringify(appData)])
@@ -121,10 +132,10 @@ function saveCaptionManually(event, id) {
     btn.innerText = "Saving...";
     document.getElementById('cloudStatus').innerText = "SAVING CAPTION...";
     
-    fetch(UPSTASH_URL, {
+    fetch(upstashConfig.url, {
         method: 'POST',
         headers: { 
-            'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+            'Authorization': `Bearer ${upstashConfig.token}`,
             'Content-Type': 'application/json' 
         },
         body: JSON.stringify(["SET", "queue_app_data", JSON.stringify(appData)])
