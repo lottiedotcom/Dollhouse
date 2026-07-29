@@ -13,6 +13,21 @@ let appData = {
 
 let loadedImages = {};
 
+// Load configs
+let upstashConfig = JSON.parse(localStorage.getItem('upstashConfig'));
+
+// Auto-prompt for Upstash keys if missing
+if (!upstashConfig || !upstashConfig.url) {
+    const url = prompt("Enter your Upstash REST URL:");
+    const token = prompt("Enter your Upstash REST Token:");
+    if (url && token) {
+        upstashConfig = { url: url.replace(/\/$/, ''), token };
+        localStorage.setItem('upstashConfig', JSON.stringify(upstashConfig));
+    } else {
+        alert("Upstash keys are required to save captions. Refresh to try again.");
+    }
+}
+
 function getImageInfo(item) {
     if (!item) return { vaultKey: '', originalName: '', tag: 'Untagged' };
     if (typeof item === 'object' && item.vaultKey) {
@@ -31,41 +46,38 @@ function getImageInfo(item) {
     return { vaultKey, originalName, tag: 'Untagged' };
 }
 
+// --------------------------------------------------------
+// UPSTASH REDIS SYNC ENGINE (Text & Schedules)
+// --------------------------------------------------------
+
 async function initQueue() {
-    document.getElementById('cloudStatus').innerText = "CONNECTING TO DATABASE...";
+    document.getElementById('cloudStatus').innerText = "CONNECTING TO UPSTASH...";
     
     try {
-        const response = await fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
-            headers: { 
-                'apikey': dbConfig.key, 
-                'Authorization': `Bearer ${dbConfig.key}`,
-                'Prefer': 'return=representation'
-            },
+        const response = await fetch(`${upstashConfig.url}/get/queue_app_data`, {
+            headers: { 'Authorization': `Bearer ${upstashConfig.token}` },
             cache: 'no-store'
         });
         
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Init Load Failed (${response.status}): ${errText}`);
-        }
+        if (!response.ok) throw new Error(`Upstash Load Failed (${response.status})`);
 
-        const data = await response.json();
-        if (data && data.length > 0) {
-            const dbState = data[0];
+        const json = await response.json();
+        if (json.result) {
+            const dbState = typeof json.result === 'string' ? JSON.parse(json.result) : json.result;
             appData.schedule = dbState.schedule || appData.schedule;
             appData.savedTags = dbState.saved_tags || [];
             appData.stash = dbState.stash || [];
             appData.slots = dbState.slots || {};
         }
 
-        document.getElementById('cloudStatus').innerText = "(★) DATABASE SYNCED & SECURE";
+        document.getElementById('cloudStatus').innerText = "(★) UPSTASH SYNCED & SECURE";
         
         await preloadAllImages();
         renderApp();
     } catch (err) {
-        console.error("Database Sync Error:", err);
-        alert(`Database Init Error:\n\n${err.message}`);
-        document.getElementById('cloudStatus').innerText = "DATABASE CONNECTION ERROR.";
+        console.error("Upstash Sync Error:", err);
+        alert(`Upstash Init Error:\n\n${err.message}`);
+        document.getElementById('cloudStatus').innerText = "UPSTASH CONNECTION ERROR.";
     }
 }
 
@@ -74,37 +86,21 @@ function saveQueueToCloud(silent = false) {
     clearTimeout(queueSyncTimeout);
     
     queueSyncTimeout = setTimeout(async () => {
-        if (!silent) document.getElementById('cloudStatus').innerText = "SAVING TO DATABASE...";
+        if (!silent) document.getElementById('cloudStatus').innerText = "SAVING TO UPSTASH...";
         
-        const payload = {
-            schedule: appData.schedule,
-            saved_tags: appData.savedTags,
-            stash: appData.stash,
-            slots: appData.slots
-        };
-
         try {
-            const res = await fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
-                method: 'PATCH',
-                headers: { 
-                    'apikey': dbConfig.key, 
-                    'Authorization': `Bearer ${dbConfig.key}`, 
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
-                },
-                body: JSON.stringify(payload)
+            const res = await fetch(`${upstashConfig.url}/set/queue_app_data`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${upstashConfig.token}` },
+                body: JSON.stringify(appData)
             });
 
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`Auto-Save Failed (${res.status}): ${errText}`);
-            }
-
+            if (!res.ok) throw new Error(`Upstash Save Failed (${res.status})`);
             if (!silent) document.getElementById('cloudStatus').innerText = "(★) QUEUE SAVED";
         } catch (err) {
             if (!silent) {
                 document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
-                alert(`Auto-Save Error:\n\n${err.message}`);
+                alert(`Upstash Auto-Save Error:\n\n${err.message}`);
             }
         }
     }, 500);
@@ -127,19 +123,12 @@ function saveCaptionManually(event, id) {
     
     const btn = event.target;
     btn.innerText = "Saving...";
-    document.getElementById('cloudStatus').innerText = "SAVING CAPTION TO DB...";
+    document.getElementById('cloudStatus').innerText = "SAVING CAPTION TO UPSTASH...";
     
-    const payload = { slots: appData.slots };
-
-    fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
-        method: 'PATCH',
-        headers: { 
-            'apikey': dbConfig.key, 
-            'Authorization': `Bearer ${dbConfig.key}`, 
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(payload)
+    fetch(`${upstashConfig.url}/set/queue_app_data`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${upstashConfig.token}` },
+        body: JSON.stringify(appData)
     }).then(async res => {
         if(res.ok) {
             document.getElementById('cloudStatus').innerText = "(★) CAPTION SECURED";
@@ -150,15 +139,19 @@ function saveCaptionManually(event, id) {
             const errText = await res.text();
             document.getElementById('cloudStatus').innerText = "SAVE FAILED.";
             btn.innerText = "❌ Error";
-            alert(`Caption Save Error (${res.status}):\n\n${errText}`);
+            alert(`Upstash Caption Save Error (${res.status}):\n\n${errText}`);
             setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
         }
     }).catch(err => {
         btn.innerText = "❌ Network Error";
-        alert(`Caption Network Error:\n\n${err.message}`);
+        alert(`Upstash Network Error:\n\n${err.message}`);
         setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
     });
 }
+
+// --------------------------------------------------------
+// SUPABASE VAULT STORAGE ENGINE (Photos Only)
+// --------------------------------------------------------
 
 async function uploadFileToVault(file) {
     const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
@@ -210,6 +203,10 @@ async function preloadAllImages() {
         }
     }
 }
+
+// --------------------------------------------------------
+// CORE APP LOGIC & UI RENDERING
+// --------------------------------------------------------
 
 function changeDay(delta) {
     document.querySelectorAll('.caption-box').forEach(el => {
@@ -726,3 +723,4 @@ function saveAndCloseSettings() {
     renderApp();
     saveQueueToCloud();
 }
+
