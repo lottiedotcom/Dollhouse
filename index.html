@@ -285,6 +285,7 @@
 
     <div id="cloudStatus">Checking connection...</div>
     
+    <!-- Progress Bar -->
     <div id="globalProgressContainer">
         <div id="globalProgressBar"></div>
     </div>
@@ -355,9 +356,11 @@
             </div>
         </div>
 
-        <!-- NEW: Dedicated Button to save Captions for this specific Day -->
+        <!-- NEW: Dedicated Manual Save Section -->
         <div style="text-align: center; margin-top: 30px;">
-            <button id="saveDayCaptionsBtn" class="btn-style" style="width: 100%; max-width: 400px; padding: 15px; margin-bottom: 10px; background: var(--baby-pink); color: var(--dark-blue); font-size: 16px; border: 3px outset var(--hot-pink);" onclick="saveCaptionsForCurrentDay()">💾 Save Day 1 Captions</button>
+            <button id="btn-save-day-captions" class="btn-style" style="width: 100%; max-width: 400px; padding: 15px; margin-bottom: 10px; background: var(--baby-blue); color: var(--dark-blue); font-size: 16px; border: 3px outset var(--dark-blue);" onclick="saveCurrentDayCaptions()">💾 Save Day 1 Captions</button>
+            
+            <button class="btn-style" style="width: 100%; max-width: 400px; padding: 15px; margin-bottom: 10px; background: #e6f2ff; color: #333; font-size: 14px; border: 3px outset #ccc;" onclick="forceSaveDrafts()">💾 Sync Entire App State</button>
             
             <button class="btn-style clear" style="width: 100%; max-width: 400px; padding: 15px; background: #fff; border: 3px outset #ccc; color: #cc0000; font-weight: bold;" onclick="clearAllSlots()">( ✖ _ ✖ ) Clear All Slots</button>
         </div>
