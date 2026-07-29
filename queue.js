@@ -31,10 +31,6 @@ function getImageInfo(item) {
     return { vaultKey, originalName, tag: 'Untagged' };
 }
 
-// --------------------------------------------------------
-// SQL DATABASE SYNC ENGINE (With Detailed Error Handling)
-// --------------------------------------------------------
-
 async function initQueue() {
     document.getElementById('cloudStatus').innerText = "CONNECTING TO DATABASE...";
     
@@ -42,7 +38,8 @@ async function initQueue() {
         const response = await fetch(`${dbConfig.url}/rest/v1/app_state?id=eq.1`, {
             headers: { 
                 'apikey': dbConfig.key, 
-                'Authorization': `Bearer ${dbConfig.key}` 
+                'Authorization': `Bearer ${dbConfig.key}`,
+                'Prefer': 'return=representation'
             },
             cache: 'no-store'
         });
@@ -113,18 +110,18 @@ function saveQueueToCloud(silent = false) {
     }, 500);
 }
 
-// LOCAL-ONLY TEXT EDITING (Does not force save on every keystroke)
 function updateCaptionTextLocally(id, text) {
     if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
     appData.slots[id].caption = text;
     updateCounters();
 }
 
-// INDEPENDENT MANUAL CAPTION SAVE BUTTON
 function saveCaptionManually(event, id) {
     const el = document.getElementById(`caption-${id}`);
     if(el) {
-        if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
+        if (!appData.slots[id]) {
+            appData.slots[id] = { images: [], caption: "" };
+        }
         appData.slots[id].caption = el.value;
     }
     
@@ -162,10 +159,6 @@ function saveCaptionManually(event, id) {
         setTimeout(() => btn.innerText = "💾 Save Caption", 2000);
     });
 }
-
-// --------------------------------------------------------
-// PHOTO VAULT STORAGE ENGINE (With Exact Error Reporting)
-// --------------------------------------------------------
 
 async function uploadFileToVault(file) {
     const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '');
@@ -218,15 +211,13 @@ async function preloadAllImages() {
     }
 }
 
-// --------------------------------------------------------
-// CORE APP LOGIC & UI RENDERING
-// --------------------------------------------------------
-
 function changeDay(delta) {
     document.querySelectorAll('.caption-box').forEach(el => {
         const id = el.id.replace('caption-', '');
-        if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
-        appData.slots[id].caption = el.value;
+        if (el.value.trim() !== "") {
+            if (!appData.slots[id]) appData.slots[id] = { images: [], caption: "" };
+            appData.slots[id].caption = el.value;
+        }
     });
 
     currentDay += delta;
@@ -664,7 +655,6 @@ async function prepForPost(id) {
     alert("Caption copied & files downloaded! (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧");
 }
 
-// STRICT AUTOMATIC PHOTO CLEANUP (Deletes physical file from Vault AND clears DB)
 async function markAsPosted(id) {
     const data = appData.slots[id];
     if (!data || !data.images || data.images.length === 0) return clearSlot(id);
@@ -736,4 +726,3 @@ function saveAndCloseSettings() {
     renderApp();
     saveQueueToCloud();
 }
-
